@@ -358,7 +358,7 @@ class OM_Gui(QWidget):
 
     def mkUI(self):
         self.setWindowTitle('OCM observing plan manager')
-        self.setGeometry(50, 50, 900, 600)
+        self.setGeometry(50, 50, 1400, 800)
 
         grid = QGridLayout()
 
