@@ -283,7 +283,7 @@ class OM_Gui(QWidget):
         self.update_table()
 
     def save_file(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", os.path.dirname(self.cfg["tel"][self.tel]["master_file"]),"Text Files (*.txt);;All Files (*)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as file:
