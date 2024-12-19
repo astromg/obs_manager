@@ -2,13 +2,13 @@
 obs_longitude: -70.1963
 obs_latitude: -24.598
 obs_elevation: 2817
+master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg
+
 columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","uobi","sciprog","pi","tag","P","hjd0","other"]
 
 
 tel:
   wk06:
-    master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg/wk06_master.txt  # file with OB definitions
     data_file: /Users/mgorski/Desktop/ocm/wk06/targets/  # directory with observations
   zb08:
-    master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg/zb08_master.txt  # file with OB definitions
     data_file: /Users/mgorski/Desktop/ocm/zb08/targets/  # directory with observations

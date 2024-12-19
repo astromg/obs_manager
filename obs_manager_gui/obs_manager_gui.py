@@ -52,8 +52,6 @@ class OM_Gui(QWidget):
         self.i = 1
         self.mkUI()
         self.tel = self.tel_s.currentText()
-        self.load_objects()
-        self.update_table()
 
 
     def update_table(self):
@@ -137,7 +135,7 @@ class OM_Gui(QWidget):
 
     def load_objects(self):
         self.ob = []
-        with open(self.cfg["tel"][self.tel]["master_file"], 'r') as plik:
+        with open(self.master_file, 'r') as plik:
             for line in plik:
                 tmp={}
                 tmp["line"] = line
@@ -246,7 +244,7 @@ class OM_Gui(QWidget):
     def update_tel(self):
         self.tel = self.tel_s.currentText()
         try:
-            self.load_objects()
+            #self.load_objects()
             self.update_table()
         except AttributeError:
             pass
@@ -356,6 +354,13 @@ class OM_Gui(QWidget):
             except Exception as e:
                 print(f"Error saving file: {e}")
 
+    def load_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
+        if file_path:
+            self.master_file = file_path
+            self.load_objects()
+            self.update_table()
+
     def mkUI(self):
         self.setWindowTitle('OCM observing plan manager')
         self.setGeometry(50, 50, 1400, 800)
@@ -446,13 +451,16 @@ class OM_Gui(QWidget):
         grid.addWidget(self.copy_p, w, 0)
 
         w = w + 1
+        self.load_p = QPushButton("Load file")
+        self.load_p.clicked.connect(self.load_file)
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
         self.config_p = QPushButton("\u2699")
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(self.close)
-        grid.addWidget(self.config_p, w, 0)
-        grid.addWidget(self.save_p, w, 1)
+        grid.addWidget(self.load_p, w, 0)
+        grid.addWidget(self.config_p, w, 1)
+        grid.addWidget(self.save_p, w, 2)
 
         w = w + 1
         grid.addWidget(self.close_p, w, 3)
