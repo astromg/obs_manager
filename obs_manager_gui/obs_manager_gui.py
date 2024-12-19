@@ -199,12 +199,15 @@ class OM_Gui(QWidget):
         i = int(self.table.currentRow())
         i_tab = [int(ob["index"]) for ob in self.ob]
 
-        n = i_tab.index(i)
-        target = self.ob[n]["name"]
+        try:
+            n = i_tab.index(i)
+            target = self.ob[n]["name"]
 
-        self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.ob[n])
-        self.phase_window.show()
-        self.phase_window.raise_()
+            self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.ob[n])
+            self.phase_window.show()
+            self.phase_window.raise_()
+        except ValueError:
+            pass
 
     def time_changed(self):
         try:
