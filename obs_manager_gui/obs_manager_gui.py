@@ -9,10 +9,9 @@ import yaml
 
 
 import warnings
-import matplotlib, numpy
-import matplotlib.patches as patches
+import numpy
 from matplotlib.figure import Figure
-from matplotlib.pyplot import Circle
+from matplotlib.patches import Rectangle
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -211,25 +210,29 @@ class OM_Gui(QWidget):
 
     def time_changed(self):
         try:
-            self.sky_window.updateMap()
-            self.sky_window.raise_()
+            if self.sky_window.isVisible():
+                self.sky_window.updateMap()
+                self.sky_window.raise_()
         except AttributeError:
             pass
         try:
-            self.phase_window.refresh()
-            self.phase_window.raise_()
+            if self.phase_window.isVisible():
+                self.phase_window.refresh()
+                self.phase_window.raise_()
         except AttributeError:
             pass
 
     def date_changed(self):
         try:
-            self.sky_window.updateMap()
-            self.sky_window.raise_()
+            if self.sky_window.isVisible():
+                self.sky_window.updateMap()
+                self.sky_window.raise_()
         except AttributeError:
             pass
         try:
-            self.phase_window.refresh()
-            self.phase_window.raise_()
+            if self.phase_window.isVisible():
+                self.phase_window.refresh()
+                self.phase_window.raise_()
         except AttributeError:
             pass
 
@@ -262,6 +265,7 @@ class OM_Gui(QWidget):
                 self.ob[i][key] = txt
                 self.ob[i]["editted"].append(j_selected)
             self.update_table()
+            self.all_c.setChecked(False)
         else:
             indx = [x["index"] for x in self.ob]
             i = indx.index(i_selected)
@@ -481,7 +485,7 @@ class PhaseWindow(QWidget):
         self.ob = ob
 
         self.setStyleSheet("font-size: 11pt;")
-        self.setMinimumSize(1000,400)
+        self.setMinimumSize(1200,600)
         self.mkUI()
         try:
             self.get_object()
@@ -502,6 +506,35 @@ class PhaseWindow(QWidget):
         obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
         time = Time(obs_time, scale='utc')
         self.current_jd = time.jd
+        jd3h = self.current_jd + 3/24.
+
+        self.axes2.clear()
+        self.axes2.set_ylim(0, 90)
+        self.axes2.set_xlim(int(self.current_jd), int(self.current_jd)+1)
+        self.axes2.axvline(x=self.current_jd, color="blue")
+
+        i = int(self.parent.table.currentRow())
+        i_tab = [int(ob["index"]) for ob in self.parent.ob]
+        n = i_tab.index(i)
+        ra = self.parent.ob[n]["ra"]
+        dec = self.parent.ob[n]["dec"]
+
+        obs_location = EarthLocation(lat=self.parent.cfg["obs_latitude"], lon=self.parent.cfg["obs_longitude"], height=self.parent.cfg["obs_elevation"])
+        object = SkyCoord(ra=ra, dec=dec, unit=('hourangle', 'deg'), frame='icrs')
+        time_range = Time(numpy.linspace(int(self.current_jd), int(self.current_jd)+1, 100), format="jd")
+        altaz_frame = AltAz(obstime=time_range, location=obs_location)
+        object_altaz = object.transform_to(altaz_frame)
+        alt = object_altaz.alt.deg
+        sun = get_sun(time_range)
+        sun_alt = sun.transform_to(altaz_frame).alt.degree
+        moon = get_moon(time_range)
+        moon_alt = moon.transform_to(altaz_frame).alt.degree
+
+
+        self.axes2.plot(time_range.jd,alt,"-g")
+        self.axes2.plot(time_range.jd, sun_alt, "--y")
+        self.axes2.plot(time_range.jd, moon_alt, "--k")
+        #self.axes2.add_patch(Rectangle((0, 0), 0.5, 10, facecolor='yellow', alpha=0.5))
 
         self.axes.clear()
         try:
@@ -538,6 +571,7 @@ class PhaseWindow(QWidget):
                         jd = (numpy.array(jd) - float(self.jd0))/float(self.P)%1
 
                         self.current_jd = (self.current_jd - float(self.jd0))/float(self.P)%1
+                        jd3h = (jd3h - float(self.jd0))/float(self.P)%1
 
                         if "ph_start" in self.ob.keys() and "ph_end" in self.ob.keys():
                             t0 = float(self.ob["ph_start"])
@@ -602,11 +636,13 @@ class PhaseWindow(QWidget):
                 self.axes.set_ylim(max(mag)+d,min(mag)-d)
 
                 self.axes.axvline(x=self.current_jd, color="blue")
+                self.axes.axvspan(self.current_jd, jd3h, color='blue', alpha=0.1)
+
 
         except (FileNotFoundError,ValueError) as e:
             print(f"Phase Window Error: {e}")
 
-        #self.fig.tight_layout()
+        self.fig.tight_layout()
         self.canvas.draw()
         self.show()
 
@@ -625,7 +661,8 @@ class PhaseWindow(QWidget):
 
         self.fig = Figure((2.0, 2.0), linewidth=-1, dpi=100)
         self.canvas = FigureCanvas(self.fig)
-        self.axes = self.fig.add_subplot(111)
+        self.axes = self.fig.add_subplot(211)
+        self.axes2 = self.fig.add_subplot(212)
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.phase_c, 0, 3)
         grid.addWidget(self.canvas,1,0,4,4)
