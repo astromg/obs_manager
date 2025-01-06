@@ -3,12 +3,18 @@ obs_longitude: -70.1963
 obs_latitude: -24.598
 obs_elevation: 2817
 master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg
+last_nights_to_mark: 7
 
-columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","uobi","sciprog","pi","tag","P","hjd0","other"]
+columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","uobi","sciprog","pi","tag","P","hjd0","comment","other"]
 
 
 tel:
   wk06:
     data_file: /Users/mgorski/Desktop/ocm/wk06/targets/  # directory with observations
+    mount_type: eq
   zb08:
     data_file: /Users/mgorski/Desktop/ocm/zb08/targets/  # directory with observations
+    mount_type: az
+  jk15:
+    data_file: /Users/mgorski/Desktop/ocm/jk15/targets/  # directory with observations
+    mount_type: az

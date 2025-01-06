@@ -88,6 +88,9 @@ class OM_Gui(QWidget):
                     if "editted" in ob.keys():
                         if j in ob["editted"]:
                             item.setBackground(QColor(170, 220, 240))
+                    if "deactivated" in ob.keys():
+                        if ob["deactivated"]:
+                            item.setBackground(QColor(150, 150, 150))
                     self.table.setItem(i, j, item)
 
 
@@ -141,6 +144,7 @@ class OM_Gui(QWidget):
                 tmp["show"] = False
                 tmp["active"] = False
                 if len(line.strip()) > 0:
+                    #DUPA
                     l = line.split()
                     if "#" not in l[0]:
                         tmp["active"] = True
@@ -154,38 +158,68 @@ class OM_Gui(QWidget):
                         tmp["pi"] = ""
                         tmp["sciprog"] = ""
                         tmp["tag"] = ""
-                        for i,w in enumerate(l):
-                            if i >= 3:
-                                if "seq=" in w:
-                                    tmp["seq"] = w.split("=")[1]
-                                elif "priority=" in w:
-                                    tmp["priority"] = w.split("=")[1]
-                                elif "cycle=" in w:
-                                    tmp["cycle"] = w.split("=")[1]
-                                elif "P=" in w:
-                                    tmp["P"] = w.split("=")[1]
-                                elif "hjd0=" in w:
-                                    tmp["hjd0"] = w.split("=")[1]
-                                elif "ph_mk=" in w:
-                                    tmp["ph_mk"] = w.split("=")[1]
-                                elif "ph_start=" in w:
-                                    tmp["ph_start"] = w.split("=")[1]
-                                elif "ph_end=" in w:
-                                    tmp["ph_end"] = w.split("=")[1]
-                                elif "t_start=" in w:
-                                    tmp["t_start"] = w.split("=")[1]
-                                elif "t_end=" in w:
-                                    tmp["t_end"] = w.split("=")[1]
-                                elif "uobi=" in w:
-                                    tmp["uobi"] = w.split("=")[1]
-                                elif "sciprog=" in w:
-                                    tmp["sciprog"] = w.split("=")[1]
-                                elif "pi=" in w:
-                                    tmp["pi"] = w.split("=")[1]
-                                elif "tag=" in w:
-                                    tmp["tag"] = w.split("=")[1]
+                        tmp["comment"] = ""
+
+                        line = line.replace(tmp["name"], "")
+                        line = line.replace(tmp["ra"], "")
+                        line = line.replace(tmp["dec"], "")
+
+                        if "seq=" in line:
+                            tmp["seq"] = line.split("seq=")[1].split()[0]
+                            line = line.replace(f'seq={tmp["seq"]}',"")
+                        if "priority=" in line:
+                            tmp["priority"] = line.split("priority=")[1].split()[0]
+                            line = line.replace(f'priority={tmp["priority"]}', "")
+                        if "cycle=" in line:
+                            tmp["cycle"] = line.split("cycle=")[1].split()[0]
+                            line = line.replace(f'cycle={tmp["cycle"]}', "")
+                        if "P=" in line:
+                            tmp["P"] = line.split("P=")[1].split()[0]
+                            line = line.replace(f'P={tmp["P"]}', "")
+                        if "hjd0=" in line:
+                            tmp["hjd0"] = line.split("hjd0=")[1].split()[0]
+                            line = line.replace(f'hjd0={tmp["hjd0"]}', "")
+                        if "ph_mk=" in line:
+                            tmp["ph_mk"] = line.split("ph_mk=")[1].split()[0]
+                            line = line.replace(f'ph_mk={tmp["ph_mk"]}', "")
+                        if "ph_start=" in line:
+                            tmp["ph_start"] = line.split("ph_start=")[1].split()[0]
+                            line = line.replace(f'ph_start={tmp["ph_start"]}', "")
+                        if "ph_end=" in line:
+                            tmp["ph_end"] = line.split("ph_end=")[1].split()[0]
+                            line = line.replace(f'ph_end={tmp["ph_end"]}', "")
+                        if "t_start=" in line:
+                            tmp["t_start"] = line.split("t_start=")[1].split()[0]
+                            line = line.replace(f't_start={tmp["t_start"]}', "")
+                        if "t_end=" in line:
+                            tmp["t_end"] = line.split("t_end=")[1].split()[0]
+                            line = line.replace(f't_end={tmp["t_end"]}', "")
+                        if "uobi=" in line:
+                            tmp["uobi"] = line.split("uobi=")[1].split()[0]
+                            line = line.replace(f'uobi={tmp["uobi"]}', "")
+                        if "sciprog=" in line:
+                            tmp["sciprog"] = line.split("sciprog=")[1].split()[0]
+                            line = line.replace(f'sciprog={tmp["sciprog"]}', "")
+                        if "pi=" in line:
+                            tmp["pi"] = line.split("pi=")[1].split()[0]
+                            line = line.replace(f'pi={tmp["pi"]}', "")
+                        if "tag=" in line:
+                            tmp["tag"] = line.split("tag=")[1].split()[0]
+                            line = line.replace(f'tag={tmp["tag"]}', "")
+                        if "comment=" in line:
+                            comment = line.split("comment=")[1]
+                            if len(comment)>0:
+                                if "\"" == comment[0]:
+                                    comment = comment.split("\"")[1]
+                                    line = line.replace(f'comment=\"{comment}\"', "")
+                                elif "(" == comment[0]:
+                                    comment = comment.split("(")[1].split(")")[0]
+                                    line = line.replace(f'comment=({comment})', "")
                                 else:
-                                    tmp["other"].append(w)
+                                    comment = comment.split()[0]
+                                    line = line.replace(f'comment={comment}', "")
+                            tmp["comment"] = comment
+                        tmp["other"] = line
                 self.ob.append(tmp)
 
     def plot_sky_map(self):
@@ -286,6 +320,14 @@ class OM_Gui(QWidget):
             self.ob[i+1]["editted"].append(j)
         self.update_table()
 
+    def deactivate(self):
+        indx = [x["index"] for x in self.ob]
+        i = indx.index(self.i)
+        tmp = copy.deepcopy(self.ob[i])
+        self.ob[i]["deactivated"] = True
+        self.ob[i]["name"] = "# "+self.ob[i]["name"]
+        self.update_table()
+
     def save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
         if file_path:
@@ -343,11 +385,13 @@ class OM_Gui(QWidget):
                             if "hjd0" in ob.keys():
                                 if len(ob["hjd0"].strip())>0:
                                     line = line + f'hjd0={ob["hjd0"].strip():10}    '
-
+                            if "comment" in ob.keys():
+                                if len(ob["comment"].strip())>0:
+                                    tmp = ob["comment"]
+                                    line = line + f'comment=\"{tmp}\" '
                             if "other" in ob.keys():
                                 if len(ob["other"])>0:
-                                    for a in ob["other"]:
-                                        line = line + a + " "
+                                    line = line + " " + ob["other"]
 
                             txt = txt + line + "\n"
                         else:
@@ -446,6 +490,7 @@ class OM_Gui(QWidget):
         grid.addWidget(self.sky_p, w, 3)
 
         self.deactivate_p = QPushButton("Deactivate")
+        self.deactivate_p.clicked.connect(self.deactivate)
         grid.addWidget(self.deactivate_p, w, 0)
 
         w = w + 1
@@ -506,12 +551,16 @@ class PhaseWindow(QWidget):
         obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
         time = Time(obs_time, scale='utc')
         self.current_jd = time.jd
-        jd3h = self.current_jd + 3/24.
+        jd3h = self.current_jd + numpy.arange(1,7,1)/24.
 
         self.axes2.clear()
-        self.axes2.set_ylim(0, 90)
+        self.axes2.set_ylim(-20, 90)
         self.axes2.set_xlim(int(self.current_jd), int(self.current_jd)+1)
         self.axes2.axvline(x=self.current_jd, color="blue")
+        self.axes2.axhspan(-20, 0, xmin=0, xmax=1, facecolor='black', alpha=0.1)
+        self.axes2.axhspan(0, 35, xmin=0, xmax=1, facecolor='black', alpha=0.05)
+        if self.parent.cfg["tel"][self.parent.tel]["mount_type"] == "az":
+            self.axes2.axhspan(80, 90, xmin=0, xmax=1, facecolor='black', alpha=0.1)
 
         i = int(self.parent.table.currentRow())
         i_tab = [int(ob["index"]) for ob in self.parent.ob]
@@ -559,6 +608,11 @@ class PhaseWindow(QWidget):
                             except ValueError:
                                 pass
             if len(mag) == len(jd) and len(jd)>0:
+
+                jd = numpy.array(jd)
+                mag = numpy.array(mag)
+                recent_obs_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
+
                 if self.phase_c.isChecked():
 
                     if "P" in self.ob.keys():
@@ -617,26 +671,53 @@ class PhaseWindow(QWidget):
                 else:
                     self.axes.set_title(f"{self.target}")
 
+
+                # last 7 days:
+                jd_tmp = jd[recent_obs_mask]
+                mag_tmp = mag[recent_obs_mask]
+                flag_tmp = numpy.array(flag)[recent_obs_mask]
+
+                mk = numpy.array(flag_tmp) == 0
+                x = numpy.array(jd_tmp)[mk]
+                y = numpy.array(mag_tmp)[mk]
+                self.axes.plot(x,y,".g",alpha=1)
+
+                mk = numpy.array(flag_tmp) == 1
+                x = numpy.array(jd_tmp)[mk]
+                y = numpy.array(mag_tmp)[mk]
+                self.axes.plot(x,y,".c",alpha=1)
+
+                mk = numpy.array(flag_tmp) == 2
+                x = numpy.array(jd_tmp)[mk]
+                y = numpy.array(mag_tmp)[mk]
+                self.axes.plot(x,y,".k",alpha=0.5)
+
+
+                # all dates
                 mk = numpy.array(flag) == 0
                 x = numpy.array(jd)[mk]
                 y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".g",alpha=0.5)
+                self.axes.plot(x,y,".g",alpha=0.1)
 
                 mk = numpy.array(flag) == 1
                 x = numpy.array(jd)[mk]
                 y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".c",alpha=0.5)
+                self.axes.plot(x,y,".c",alpha=0.1)
 
                 mk = numpy.array(flag) == 2
                 x = numpy.array(jd)[mk]
                 y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".k",alpha=0.5)
+                self.axes.plot(x,y,".k",alpha=0.05)
 
                 d = 0.1*(max(mag)-min(mag))
                 self.axes.set_ylim(max(mag)+d,min(mag)-d)
 
                 self.axes.axvline(x=self.current_jd, color="blue")
-                self.axes.axvspan(self.current_jd, jd3h, color='blue', alpha=0.1)
+                i_tmp = 1.
+                for x in jd3h:
+                    i_tmp += 1
+                    self.axes.axvline(x, color="blue", alpha = 1/i_tmp)
+                #self.axes.axvspan(self.current_jd, jd3h, color='blue', alpha=0.1)
 
 
         except (FileNotFoundError,ValueError) as e:
