@@ -3,7 +3,7 @@ obs_longitude: -70.1963
 obs_latitude: -24.598
 obs_elevation: 2817
 master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg
-last_nights_to_mark: 7
+last_nights_to_mark: 50
 
 columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","uobi","sciprog","pi","tag","P","hjd0","comment","other"]
 
