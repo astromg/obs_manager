@@ -223,9 +223,12 @@ class OM_Gui(QWidget):
                 self.ob.append(tmp)
 
     def plot_sky_map(self):
-        self.sky_window = SkyWindow(self)
-        self.sky_window.show()
-        self.sky_window.raise_()
+        try:
+            self.sky_window = SkyWindow(self)
+            self.sky_window.show()
+            self.sky_window.raise_()
+        except:
+            pass
 
 
     def plot_data(self):
@@ -393,7 +396,9 @@ class OM_Gui(QWidget):
                                 if len(ob["other"])>0:
                                     line = line + " " + ob["other"]
 
-                            txt = txt + line + "\n"
+                            txt = txt + line
+                            if not txt.endswith("\n"):
+                                txt = txt + "\n"
                         else:
                             txt = txt + ob["line"]
 
