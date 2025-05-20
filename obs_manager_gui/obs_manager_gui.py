@@ -25,6 +25,8 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.time import Time
 from astropy.coordinates import EarthLocation, Angle, get_sun, get_moon
 from astropy.coordinates import SkyCoord, AltAz
+from astropy.table import Table
+
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
@@ -599,19 +601,24 @@ class PhaseWindow(QWidget):
             jd = []
             flag = []
 
-            with open(file, "r") as plik:
-                if plik != None:
-                    for line in plik:
-                        if len(line.strip()) > 0:
-                            try:
-                                mag.append(float(line.split()[1]))
-                                jd.append(float(line.split()[3]))
-                                try:
-                                    flag.append(int(line.split()[9]))
-                                except:
-                                    flag.append(int(0))
-                            except ValueError:
-                                pass
+            lc_tab = Table.read(file, format="ascii")
+            mag = lc_tab["mag"]
+            jd = lc_tab["jd_obs"]
+            flag = lc_tab["quality"]
+
+            # with open(file, "r") as plik:
+            #     if plik != None:
+            #         for line in plik:
+            #             if len(line.strip()) > 0:
+            #                 try:
+            #                     mag.append(float(line.split()[1]))
+            #                     jd.append(float(line.split()[3]))
+            #                     try:
+            #                         flag.append(int(line.split()[9]))
+            #                     except:
+            #                         flag.append(int(0))
+            #                 except ValueError:
+            #                     pass
             if len(mag) == len(jd) and len(jd)>0:
 
                 jd = numpy.array(jd)
