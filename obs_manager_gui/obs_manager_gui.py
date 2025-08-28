@@ -4,9 +4,8 @@ import math
 import os,sys
 import datetime
 import uuid
-
 import yaml
-
+import requests
 
 import warnings
 import numpy
@@ -141,12 +140,13 @@ class OM_Gui(QWidget):
         self.ob = []
         with open(self.master_file, 'r') as plik:
             for line in plik:
+                line = line.strip()
                 tmp={}
                 tmp["line"] = line
                 tmp["show"] = False
                 tmp["active"] = False
-                if len(line.strip()) > 0:
-                    #DUPA
+                if len(line.split()) > 0:
+
                     l = line.split()
                     if "#" not in l[0]:
                         tmp["active"] = True
@@ -222,7 +222,7 @@ class OM_Gui(QWidget):
                                     line = line.replace(f'comment={comment}', "")
                             tmp["comment"] = comment
                         tmp["other"] = line
-                self.ob.append(tmp)
+                    self.ob.append(tmp)
 
     def plot_sky_map(self):
         try:
@@ -412,11 +412,45 @@ class OM_Gui(QWidget):
             except Exception as e:
                 print(f"Error saving file: {e}")
 
+    def update_data(self):
+        #DUPA
+        base="https://araucaria.camk.edu.pl/data/ocm/internal/Nzg3N2dVlZmQtNGIy/"
+
+        #zb08 / targets / u_lep / Ic / light - curve / u_lep_Ic_diff_light_curve.txt
+        tel = self.tel_s.currentText()
+        if hasattr(self, "ob"):
+            for ob in self.ob:
+                if "obs_data" in ob.keys():
+                    print(ob["obs_data"])
+                elif "name" in ob.keys():
+                    name = ob["name"].lower()
+                    if "ph_mk" in ob.keys():
+                        filtr = ob["ph_mk"].split("/")[1]
+                    elif "seq" in ob.keys():
+                        filtr = ob["seq"].split("/")[1]
+                    else:
+                        filtr = "V"
+                    path = tel+"/targets/"+name+"/"+filtr+"/light-curve/"+name+"_"+filtr+"_diff_light_curve.txt"
+                    url = base+path
+                    response = requests.get(url)
+                    if response.status_code == 200:
+                        f_name = "./obs_data/"+path
+                        os.makedirs(os.path.dirname(f_name), exist_ok=True)
+                        with open(f_name, "wb") as f:
+                            f.write(response.content)
+                        print(f'file {path.split("/")[-1]} updated!')
+                    else:
+                        print(f'file {path.split("/")[-1]}', response.status_code)
+
+
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
         if file_path:
             self.master_file = file_path
             self.load_objects()
+            for t in self.cfg["tel"].keys():
+                if t in self.master_file:
+                    self.tel_s.setCurrentText(t)
             self.update_table()
 
     def mkUI(self):
@@ -512,17 +546,20 @@ class OM_Gui(QWidget):
         w = w + 1
         self.load_p = QPushButton("Load file")
         self.load_p.clicked.connect(self.load_file)
+        self.update_p = QPushButton("Update Data")
+        self.update_p.clicked.connect(self.update_data)
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
         self.config_p = QPushButton("\u2699")
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(self.close)
         grid.addWidget(self.load_p, w, 0)
-        grid.addWidget(self.config_p, w, 1)
-        grid.addWidget(self.save_p, w, 2)
+        grid.addWidget(self.update_p, w, 1)
+        grid.addWidget(self.config_p, w, 2)
+        grid.addWidget(self.save_p, w, 3)
 
         w = w + 1
-        grid.addWidget(self.close_p, w, 3)
+        grid.addWidget(self.close_p, w, 4)
 
         self.setLayout(grid)
 

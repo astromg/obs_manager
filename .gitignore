@@ -1,6 +1,7 @@
 .DS_Store
 .idea
 poetry.lock
+obs_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
