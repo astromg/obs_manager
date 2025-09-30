@@ -7,13 +7,15 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
 requests = "^2.28.1"
 matplotlib = "^3.6.3"
 astropy = ">=5.0.4,<5.1.0"
 PyQt6 = "^6.6.1"
 scipy = "^1.11"
 numpy = "^1.24.1"
+tpg = { path = "../GITHUB/tpg" }
+
 
 [tool.poetry.scripts]
 obs_manager = "obs_manager:main"

@@ -12,10 +12,12 @@ import numpy
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
+import ephem
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QTextEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog
 from PyQt6.QtCore import Qt, QTime, QDate, QDateTime
 from PyQt6.QtGui import QFont, QColor
 
@@ -26,6 +28,7 @@ from astropy.coordinates import EarthLocation, Angle, get_sun, get_moon
 from astropy.coordinates import SkyCoord, AltAz
 from astropy.table import Table
 
+from telescope_plan_generator import telescope_plan_generator as tpg
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
@@ -37,8 +40,8 @@ class OM_Gui(QWidget):
         self.cwd = os.getcwd()  # curent working directory
         self.pwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # app location
 
-        print(self.cwd)
-        print(self.pwd)
+        #print(self.cwd)
+        #print(self.pwd)
 
         if os.path.exists(self.pwd+'/config.yaml'):
             with open(self.pwd+'/config.yaml', 'r') as cfg_file:
@@ -49,17 +52,46 @@ class OM_Gui(QWidget):
 
         #print(self.cfg)
 
+        self.tpg_window = None
         self.i = 1
         self.mkUI()
         self.tel = self.tel_s.currentText()
+        self.update_almanac()
 
 
     def update_table(self):
+        row_labels = []
+
         try:
             self.table.cellChanged.disconnect(self.data_edit)
             self.table.cellClicked.disconnect(self.pocisniecie_tabelki)
         except TypeError:
             pass
+
+        m = "-99"
+        tpg = False
+        tmp_txt = ""
+        if self.tpg_window:
+            try:
+                tpg_ob = self.tpg_window.p.ob
+                tpg_ind_list = [t["index"] for t in tpg_ob]
+
+                date = self.date_e.date().toPyDate()
+                ut = self.time_e.time().toPyTime()
+                dt = datetime.datetime.combine(date, ut)
+
+                current_time = ephem.Date(dt)
+                tpg_time = self.tpg_window.p.nightTime
+                time_diff = numpy.abs([t - current_time for t in tpg_time])
+
+                m = numpy.argmin(time_diff)
+
+                #print(ephem.Date(current_time),ephem.Date(tpg_time[m]),time_diff[m])
+
+
+                tpg = True
+            except AttributeError:
+                tpg = False
 
         font = QFont()
         font.setPointSize(10)  # Ustawienie mniejszej czcionki
@@ -68,7 +100,6 @@ class OM_Gui(QWidget):
         self.table.setColumnCount(len(self.cfg["columns"]))
         for n,col_name in enumerate(self.cfg["columns"]):
             self.table.setHorizontalHeaderItem(n,QTableWidgetItem(col_name))
-
 
         for ob in self.ob:
             ob["index"] = -2
@@ -81,9 +112,38 @@ class OM_Gui(QWidget):
                 ob["index"] = i
                 if self.table.rowCount() <= i:
                     self.table.insertRow(i)  # Dodanie nowego wiersza
+
+                # pisze ile widoczne i czy teraz widoczne
+                red_znacznik = False
+                row_txt = f'{i}'
+
+                if tpg:
+                    i_tmp = ob["index"]
+                    q = tpg_ind_list.index(i_tmp)
+                    vis = tpg_ob[q]["visibility"]["all"]
+
+                    if not vis[m] and m != 0:
+                        # if "113" in tpg_ob[q]["name"]:
+                        #     print(vis)
+                        #     print(m,vis[m])
+                        red_znacznik = True
+
+                    vis = numpy.array(vis)
+                    t_vis = len(vis[vis])
+                    h_vis = t_vis / 60
+                    m_vis = t_vis - int(h_vis)*60
+
+                    row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
+
                 for j,key in enumerate(self.cfg["columns"]):
                     if key in ob.keys():
                         item = QTableWidgetItem(str(ob[key]))
+                        if red_znacznik:
+                            item.setForeground(QColor("red"))
+                        else:
+                            item.setForeground(QColor("black"))
+
+
                     else:
                         item = QTableWidgetItem("")
                     if "editted" in ob.keys():
@@ -93,8 +153,9 @@ class OM_Gui(QWidget):
                         if ob["deactivated"]:
                             item.setBackground(QColor(150, 150, 150))
                     self.table.setItem(i, j, item)
+                row_labels.append(row_txt)
 
-
+        self.table.setVerticalHeaderLabels(row_labels)
 
         self.table.resizeColumnsToContents()
         max_column_width = 100  # Maksymalna szerokość kolumny
@@ -147,7 +208,7 @@ class OM_Gui(QWidget):
                 tmp["active"] = False
                 if len(line.split()) > 0:
 
-                    l = line.split()
+                    l = line.strip().split()
                     if "#" not in l[0]:
                         tmp["active"] = True
                         tmp["name"] = l[0]
@@ -166,48 +227,11 @@ class OM_Gui(QWidget):
                         line = line.replace(tmp["ra"], "")
                         line = line.replace(tmp["dec"], "")
 
-                        if "seq=" in line:
-                            tmp["seq"] = line.split("seq=")[1].split()[0]
-                            line = line.replace(f'seq={tmp["seq"]}',"")
-                        if "priority=" in line:
-                            tmp["priority"] = line.split("priority=")[1].split()[0]
-                            line = line.replace(f'priority={tmp["priority"]}', "")
-                        if "cycle=" in line:
-                            tmp["cycle"] = line.split("cycle=")[1].split()[0]
-                            line = line.replace(f'cycle={tmp["cycle"]}', "")
-                        if "P=" in line:
-                            tmp["P"] = line.split("P=")[1].split()[0]
-                            line = line.replace(f'P={tmp["P"]}', "")
-                        if "hjd0=" in line:
-                            tmp["hjd0"] = line.split("hjd0=")[1].split()[0]
-                            line = line.replace(f'hjd0={tmp["hjd0"]}', "")
-                        if "ph_mk=" in line:
-                            tmp["ph_mk"] = line.split("ph_mk=")[1].split()[0]
-                            line = line.replace(f'ph_mk={tmp["ph_mk"]}', "")
-                        if "ph_start=" in line:
-                            tmp["ph_start"] = line.split("ph_start=")[1].split()[0]
-                            line = line.replace(f'ph_start={tmp["ph_start"]}', "")
-                        if "ph_end=" in line:
-                            tmp["ph_end"] = line.split("ph_end=")[1].split()[0]
-                            line = line.replace(f'ph_end={tmp["ph_end"]}', "")
-                        if "t_start=" in line:
-                            tmp["t_start"] = line.split("t_start=")[1].split()[0]
-                            line = line.replace(f't_start={tmp["t_start"]}', "")
-                        if "t_end=" in line:
-                            tmp["t_end"] = line.split("t_end=")[1].split()[0]
-                            line = line.replace(f't_end={tmp["t_end"]}', "")
-                        if "uobi=" in line:
-                            tmp["uobi"] = line.split("uobi=")[1].split()[0]
-                            line = line.replace(f'uobi={tmp["uobi"]}', "")
-                        if "sciprog=" in line:
-                            tmp["sciprog"] = line.split("sciprog=")[1].split()[0]
-                            line = line.replace(f'sciprog={tmp["sciprog"]}', "")
-                        if "pi=" in line:
-                            tmp["pi"] = line.split("pi=")[1].split()[0]
-                            line = line.replace(f'pi={tmp["pi"]}', "")
-                        if "tag=" in line:
-                            tmp["tag"] = line.split("tag=")[1].split()[0]
-                            line = line.replace(f'tag={tmp["tag"]}', "")
+                        for x in self.cfg["columns"]:
+                            if x+"=" in line and "comment" not in x:
+                                tmp[x] = line.split(x+"=")[1].split()[0]
+                                line = line.replace(f'{x}={tmp[x]}', "")
+
                         if "comment=" in line:
                             comment = line.split("comment=")[1]
                             if len(comment)>0:
@@ -221,7 +245,10 @@ class OM_Gui(QWidget):
                                     comment = comment.split()[0]
                                     line = line.replace(f'comment={comment}', "")
                             tmp["comment"] = comment
-                        tmp["other"] = line
+                        tmp["other"] = line.strip()
+                    self.ob.append(tmp)
+                else:
+                    tmp["line"] = "\n"
                     self.ob.append(tmp)
 
     def plot_sky_map(self):
@@ -275,6 +302,35 @@ class OM_Gui(QWidget):
         except AttributeError:
             pass
 
+    def update_almanac(self):
+        obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
+        time = Time(obs_time, scale='utc')
+        self.almanac = sun_moon_ephem(time, self.cfg["obs_latitude"], self.cfg["obs_longitude"], self.cfg["obs_elevation"], horizon=0*units.deg)
+        # print(time.to_datetime() )
+        # print(self.almanac["next_sunrise"])
+        # print( self.almanac["next_sunrise"] - time.to_datetime() )
+
+        txt = ""
+        txt = txt + f'sunset: {self.almanac["next_sunset"]}\n'
+        txt = txt + f'sunrise: {self.almanac["next_sunrise"]}\n'
+        txt = txt + f'moon: {self.almanac["moon_phase"]}\n'
+        txt = txt + f'moonrise: {self.almanac["next_moonrise"]}\n'
+        txt = txt + f'moonset: {self.almanac["next_moonset"]}\n'
+
+
+
+        self.almanac_e.setText(txt)
+        # "julian_date": jd,
+        # "prev_sunrise": prev_sunrise,
+        # "next_sunrise": next_sunrise,
+        # "prev_sunset": prev_sunset,
+        # "next_sunset": next_sunset,
+        # "prev_moonrise": prev_moonrise,
+        # "next_moonrise": next_moonrise,
+        # "prev_moonset": prev_moonset,
+        # "next_moonset": next_moonset,
+        # "moon_phase": moon_ph
+
     def update_selection(self):
         self.table.selectRow(self.i)
 
@@ -289,7 +345,6 @@ class OM_Gui(QWidget):
     def update_tel(self):
         self.tel = self.tel_s.currentText()
         try:
-            #self.load_objects()
             self.update_table()
         except AttributeError:
             pass
@@ -345,6 +400,7 @@ class OM_Gui(QWidget):
                             line = line + f'{ob["name"]:20}    '
                             line = line + f'{ob["ra"]:15}    '
                             line = line + f'{ob["dec"]:15}    '
+
                             if "seq" in ob.keys():
                                 if len(ob["seq"].strip())<10:
                                     line = line + f'seq={ob["seq"].strip():10}    '
@@ -352,68 +408,32 @@ class OM_Gui(QWidget):
                                     line = line + f'seq={ob["seq"].strip():30}    '
                                 else:
                                     line = line + f'seq={ob["seq"].strip():60}    '
-                            if "priority" in ob.keys():
-                                line = line + f'priority={str(ob["priority"]).strip():3}    '
-                            if "cycle" in ob.keys():
-                                if len(ob["cycle"].strip())>0:
-                                    line = line + f'cycle={str(ob["cycle"]).strip():3}    '
-                            if "ph_mk" in ob.keys():
-                                if len(ob["ph_mk"].strip())>0:
-                                    line = line + f'ph_mk={ob["ph_mk"].strip():10}    '
-                            if "ph_start" in ob.keys():
-                                if len(ob["ph_start"].strip())>0:
-                                    line = line + f'ph_start={ob["ph_start"].strip():10}    '
-                            if "ph_end" in ob.keys():
-                                if len(ob["ph_end"].strip())>0:
-                                    line = line + f'ph_end={ob["ph_end"].strip():10}    '
-                            if "t_start" in ob.keys():
-                                if len(ob["t_start"].strip())>0:
-                                    line = line + f't_start={ob["t_start"].strip():10}    '
-                            if "t_end" in ob.keys():
-                                if len(ob["t_end"].strip())>0:
-                                    line = line + f't_end={ob["t_end"].strip():10}    '
-                            if "uobi" in ob.keys():
-                                if len(ob["uobi"].strip())>0:
-                                    line = line + f'uobi={ob["uobi"].strip():10}    '
-                            if "sciprog" in ob.keys():
-                                if len(ob["sciprog"].strip())>0:
-                                    line = line + f'sciprog={ob["sciprog"].strip():10}    '
-                            if "pi" in ob.keys():
-                                if len(ob["pi"].strip())>0:
-                                    line = line + f'pi={ob["pi"].strip():10}    '
-                            if "tag" in ob.keys():
-                                if len(ob["tag"].strip())>0:
-                                    line = line + f'tag={ob["tag"].strip():10}    '
-                            if "P" in ob.keys():
-                                if len(ob["P"].strip())>0:
-                                    line = line + f'P={ob["P"].strip():10}    '
-                            if "hjd0" in ob.keys():
-                                if len(ob["hjd0"].strip())>0:
-                                    line = line + f'hjd0={ob["hjd0"].strip():10}    '
+
+                            for x in self.cfg["columns"]:
+                                if x in ob.keys() and x not in ["name","ra","dec","seq","comment"]:
+                                    if len(ob[x].strip()) > 0:
+                                        line = line + f'{x}={str(ob[x]).strip()}    '
+
                             if "comment" in ob.keys():
                                 if len(ob["comment"].strip())>0:
                                     tmp = ob["comment"]
                                     line = line + f'comment=\"{tmp}\" '
-                            if "other" in ob.keys():
-                                if len(ob["other"])>0:
-                                    line = line + " " + ob["other"]
 
                             txt = txt + line
-                            if not txt.endswith("\n"):
-                                txt = txt + "\n"
                         else:
                             txt = txt + ob["line"]
+                        if not txt.endswith("\n"):
+                            txt = txt + "\n"
 
 
 # columns:  ["uobi","sciprog","pi","tag","other"]
-
+                    #print(txt)
                     file.write(txt)
                     print(f'objects saved to {file_path}')
             except Exception as e:
                 print(f"Error saving file: {e}")
 
     def update_data(self):
-        #DUPA
         base="https://araucaria.camk.edu.pl/data/ocm/internal/Nzg3N2dVlZmQtNGIy/"
 
         #zb08 / targets / u_lep / Ic / light - curve / u_lep_Ic_diff_light_curve.txt
@@ -442,6 +462,10 @@ class OM_Gui(QWidget):
                     else:
                         print(f'file {path.split("/")[-1]}', response.status_code)
 
+    def tpg_show(self):
+        self.update_almanac()
+        self.tpg_window = TPGWindow(self)
+
 
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
@@ -458,6 +482,10 @@ class OM_Gui(QWidget):
         self.setGeometry(50, 50, 1400, 800)
 
         grid = QGridLayout()
+
+
+        self.almanac_e = QTextEdit()
+        grid.addWidget(self.almanac_e, 0, 4,3,3)
 
         w = 0
         self.tel_s = QComboBox()
@@ -534,6 +562,10 @@ class OM_Gui(QWidget):
         self.deactivate_p.clicked.connect(self.deactivate)
         grid.addWidget(self.deactivate_p, w, 0)
 
+        self.deactivate_p = QPushButton("TPG")
+        self.deactivate_p.clicked.connect(self.tpg_show)
+        grid.addWidget(self.deactivate_p, w, 1)
+
         w = w + 1
         self.data_p = QPushButton("Plot data")
         self.data_p.clicked.connect(self.plot_data)
@@ -587,7 +619,6 @@ class PhaseWindow(QWidget):
 
         self.f_path = self.data_dir+self.target.lower()
         self.filters = os.listdir(self.f_path)
-        #print(self.filters)
         self.file_s.addItems(self.filters)
 
     def refresh(self):
@@ -597,14 +628,33 @@ class PhaseWindow(QWidget):
         self.current_jd = time.jd
         jd3h = self.current_jd + numpy.arange(1,7,1)/24.
 
+
+        txt = f'moon phase: {self.parent.almanac["moon_phase"]:.0f} %'
+        self.ephem_e.setText(txt)
+
+        self.ephem_e.setStyleSheet("background-color: white;")
+        if self.ob.get("max_moon_phase", False):
+            if float(self.ob["max_moon_phase"]) < float(self.parent.almanac["moon_phase"]):
+                self.ephem_e.setStyleSheet("background-color: lightcoral;")
+
+        if self.ob.get("h_min", False):
+            hmin = float(self.ob["h_min"])
+        else:
+            hmin = self.parent.cfg["tel"][self.parent.tel]["hmin"]
+
+        if self.ob.get("h_min", False):
+            hmax = float(self.ob["h_max"])
+        else:
+            hmax = self.parent.cfg["tel"][self.parent.tel]["hmax"]
+
         self.axes2.clear()
         self.axes2.set_ylim(-20, 90)
         self.axes2.set_xlim(int(self.current_jd), int(self.current_jd)+1)
         self.axes2.axvline(x=self.current_jd, color="blue")
-        self.axes2.axhspan(-20, 0, xmin=0, xmax=1, facecolor='black', alpha=0.1)
-        self.axes2.axhspan(0, 35, xmin=0, xmax=1, facecolor='black', alpha=0.05)
+        self.axes2.axhspan(-20, 0, xmin=0, xmax=1, facecolor='red', alpha=0.1)
+        self.axes2.axhspan(0, hmin, xmin=0, xmax=1, facecolor='black', alpha=0.05)
         if self.parent.cfg["tel"][self.parent.tel]["mount_type"] == "az":
-            self.axes2.axhspan(80, 90, xmin=0, xmax=1, facecolor='black', alpha=0.1)
+            self.axes2.axhspan(hmax, 90, xmin=0, xmax=1, facecolor='black', alpha=0.1)
 
         i = int(self.parent.table.currentRow())
         i_tab = [int(ob["index"]) for ob in self.parent.ob]
@@ -622,6 +672,15 @@ class PhaseWindow(QWidget):
         sun_alt = sun.transform_to(altaz_frame).alt.degree
         moon = get_moon(time_range)
         moon_alt = moon.transform_to(altaz_frame).alt.degree
+        sep = object_altaz.separation(moon).deg
+
+        txt = f'separation: {min(sep):.0f}\u00B0'
+        self.moon_sep_e.setText(txt)
+
+        self.moon_sep_e.setStyleSheet("background-color: white;")
+        if self.ob.get("min_moon_dist", False):
+            if float(self.ob["min_moon_dist"]) > float(min(sep)):
+                self.moon_sep_e.setStyleSheet("background-color: lightcoral;")
 
 
         self.axes2.plot(time_range.jd,alt,"-g")
@@ -643,26 +702,24 @@ class PhaseWindow(QWidget):
             jd = lc_tab["jd_obs"]
             flag = lc_tab["quality"]
 
-            # with open(file, "r") as plik:
-            #     if plik != None:
-            #         for line in plik:
-            #             if len(line.strip()) > 0:
-            #                 try:
-            #                     mag.append(float(line.split()[1]))
-            #                     jd.append(float(line.split()[3]))
-            #                     try:
-            #                         flag.append(int(line.split()[9]))
-            #                     except:
-            #                         flag.append(int(0))
-            #                 except ValueError:
-            #                     pass
             if len(mag) == len(jd) and len(jd)>0:
 
                 jd = numpy.array(jd)
                 mag = numpy.array(mag)
                 recent_obs_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
 
+
+                # obsluga rysowania cycle part 1.
+                plot_cycle = False
+                if self.ob.get("cycle", False):
+                    mk = numpy.array(flag) != 2   # tylko dobre obserwacje
+                    last_jd = max(numpy.array(jd)[mk])
+                    end_cycle =  last_jd + float(self.ob["cycle"])
+                    plot_cycle = True
+
                 if self.phase_c.isChecked():
+
+                    plot_cycle = False
 
                     if "P" in self.ob.keys():
                         self.P = self.ob["P"]
@@ -766,7 +823,15 @@ class PhaseWindow(QWidget):
                 for x in jd3h:
                     i_tmp += 1
                     self.axes.axvline(x, color="blue", alpha = 1/i_tmp)
-                #self.axes.axvspan(self.current_jd, jd3h, color='blue', alpha=0.1)
+
+
+                # obsluga rysowania cycle part 2.
+                if self.ob.get("cycle", False):
+                    if plot_cycle:
+                        self.axes.fill_between([last_jd, end_cycle],min(mag), max(mag),color='red', alpha=0.1)
+
+                    if end_cycle > int(self.current_jd):
+                        self.axes2.fill_between([int(self.current_jd), end_cycle],-20, 90,color='red', alpha=0.1)
 
 
         except (FileNotFoundError,ValueError) as e:
@@ -783,9 +848,14 @@ class PhaseWindow(QWidget):
 
         self.file_s = QComboBox()
         self.file_s.currentIndexChanged.connect(self.refresh)
+
+        self.ephem_e = QLineEdit()
+        self.ephem_e.setReadOnly(True)
+        self.moon_sep_e = QLineEdit()
+        self.moon_sep_e.setReadOnly(True)
+
         self.phase_c = QCheckBox("Phase")
         self.phase_c.setChecked(True)
-        #self.phase_c.setStyleSheet("QCheckBox::indicator:checked {image: url(./Icons/SwitchOn.png)}::indicator:unchecked {image: url(./Icons/SwitchOff.png)}")
         self.phase_c.clicked.connect(self.refresh)
 
 
@@ -794,6 +864,8 @@ class PhaseWindow(QWidget):
         self.axes = self.fig.add_subplot(211)
         self.axes2 = self.fig.add_subplot(212)
         grid.addWidget(self.file_s, 0, 0)
+        grid.addWidget(self.ephem_e, 0, 1)
+        grid.addWidget(self.moon_sep_e, 0, 2)
         grid.addWidget(self.phase_c, 0, 3)
         grid.addWidget(self.canvas,1,0,4,4)
 
@@ -804,8 +876,10 @@ class PhaseWindow(QWidget):
         self.close_p.clicked.connect(lambda: self.close())
         grid.addWidget(self.close_p, 6, 3)
 
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 0)
+        #grid.setColumnStretch(0, 1)
+        #grid.setColumnStretch(1, 1)
+        #grid.setColumnStretch(2, 1)
+        #grid.setColumnStretch(3, 1)
         grid.setRowStretch(0, 1)
         grid.setRowStretch(1, 0)
         grid.setRowStretch(2, 0)
@@ -970,3 +1044,259 @@ class SkyWindow(QWidget):
                         self.parent.update_selection()
 
 
+class TPGWindow(QWidget):
+    def __init__(self, parent):
+        super(TPGWindow, self).__init__()
+        self.parent = parent
+
+        self.setStyleSheet("font-size: 11pt;")
+        self.setMinimumSize(100,200)
+        self.mkUI()
+
+
+        # DUPA
+        #     p = tpg(args.tel,args.date,wind=args.wind,loud=args.loud,seed=args.seed,done_uobi=[])
+
+    def load(self):
+        tel = self.parent.tel_s.currentText()
+
+        date = self.parent.date_e.date().toPyDate()
+        ut =   self.parent.time_e.time().toPyTime()
+
+        t0 = datetime.datetime.combine(date, ut)
+
+        t1 = self.parent.almanac["next_sunset"]
+        t2 = self.parent.almanac["prev_sunset"]
+
+        if (t1 - t0) > (t2 - t0):
+            dt = [str(date - datetime.timedelta(days=1))]
+        else:
+            dt = str(date)
+
+        self.p = tpg(tel, dt)
+
+        self.p.Initiate()
+        self.p.LoadObjects()
+        self.p.ob = []
+        for n,ob in enumerate(self.parent.ob):
+            if "active" in ob.keys() and "show" in ob.keys():
+                if ob["active"] and ob["show"]:
+                    line = ob["line"]
+                    tmp_ob = self.p.parseObjects(line)
+                    tmp_ob["index"] = ob["index"]
+
+                    # if "min_moon_dist" in tmp_ob.keys():
+                    #     print(tmp_ob["min_moon_dist"])
+
+                    self.p.ob.append(tmp_ob)
+        self.p.MakeTime()
+
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+
+
+    def calc_vis(self):
+        self.p.CalcObject()
+        self.parent.update_table()
+        # for n,ob in enumerate(self.p.ob):
+        #     if "visibility" in ob.keys():
+        #         print(ob["name"])
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_moon(self):
+        self.p.MaskMoon()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_wind(self):
+        self.p.MaskWind()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_cycle(self):
+        self.p.MaskCycle()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_startend(self):
+        self.p.MaskStartEnd()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_phstartend(self):
+        self.p.MaskPhaseStartEnd()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def mask_phase(self):
+        self.p.MaskPhase()
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+    def run_tpg(self):
+        self.load()
+        self.calc_vis()
+        self.mask_moon()
+        self.mask_wind()
+        self.mask_cycle()
+        self.mask_startend()
+        self.mask_phstartend()
+        self.mask_phase()
+        self.p.Waga()
+        self.p.RandomizeList()
+        self.p.allocate()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+
+        # wypisuje log
+        # vis_list = ["h_min", "h_max", "min_moon_dist", "max_moon_phase", "wind","cycle", "t_start", "t_end",
+        #             "ph_start","ph_end","ph_mk","all"]
+        # txt = "name    "+"    ".join(vis_list) + "\n"
+        # for n,ob in enumerate(self.p.ob):
+        #     txt = txt + self.p.ob[n]["name"]
+        #     for k in vis_list:
+        #         if k in self.p.ob[n]["visibility"].keys():
+        #             vis = numpy.array(self.p.ob[n]["visibility"][k])
+        #             minutes = len(vis[vis])
+        #             txt = txt+ "    "+str(minutes)
+        #         else:
+        #             txt = txt + "    --"
+        #
+        #     txt = txt + "\n"
+        #
+        # print(txt)
+
+        self.p.export()  # export plan
+        self.parent.update_table()
+
+
+    def mkUI(self):
+        grid = QGridLayout()
+
+        self.log_e = QTextEdit()
+        grid.addWidget(self.log_e, 0, 0,8,1)
+
+        self.load_p = QPushButton('Load data / Init')
+        self.load_p.clicked.connect(self.load)
+        grid.addWidget(self.load_p, 0, 1)
+
+        self.vis_p = QPushButton('Visibility')
+        self.vis_p.clicked.connect(self.calc_vis)
+        grid.addWidget(self.vis_p, 1, 1)
+
+        self.moon_p = QPushButton('Moon')
+        self.moon_p.clicked.connect(self.mask_moon)
+        grid.addWidget(self.moon_p, 2, 1)
+
+        self.wind_p = QPushButton('Wind')
+        self.wind_p.clicked.connect(self.mask_wind)
+        grid.addWidget(self.wind_p, 3, 1)
+
+        self.cycle_p = QPushButton('Cycle')
+        self.cycle_p.clicked.connect(self.mask_cycle)
+        grid.addWidget(self.cycle_p, 4, 1)
+
+        self.time_p = QPushButton('Time')
+        self.time_p.clicked.connect(self.mask_startend)
+        grid.addWidget(self.time_p, 5, 1)
+
+        self.phlim_p = QPushButton('Phase limits')
+        self.phlim_p.clicked.connect(self.mask_phstartend)
+        grid.addWidget(self.phlim_p, 6, 1)
+
+        self.phmk_p = QPushButton('Phase density')
+        self.phmk_p.clicked.connect(self.mask_phase)
+        grid.addWidget(self.phmk_p, 7, 1)
+
+        self.tpg_p = QPushButton('run tpg')
+        self.tpg_p.clicked.connect(self.run_tpg)
+        grid.addWidget(self.tpg_p, 8, 1)
+
+        self.close_p = QPushButton('Close')
+        self.close_p.clicked.connect(lambda: self.close())
+        grid.addWidget(self.close_p, 9, 0)
+
+        self.setLayout(grid)
+        self.show()
+
+
+
+def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
+
+    loc = EarthLocation(lat=lat*units.deg, lon=lon*units.deg, height=altitude*units.m)
+    t0 = Time(obs_time)
+    jd = t0.jd
+
+    delta_min = 1 * units.min
+    times = t0 + delta_min * numpy.arange(-24*60, 24*60)
+
+    # --- sun ---
+    sun_alt = get_sun(times).transform_to(AltAz(obstime=times, location=loc)).alt - horizon
+    sun_crossings = numpy.where(numpy.diff(numpy.sign(sun_alt.value)))[0]
+
+    sunrise_times, sunset_times = [], []
+    for c in sun_crossings:
+        t_cross = times[c].to_datetime()
+        if sun_alt[c] < 0 and sun_alt[c+1] > 0:
+            sunrise_times.append(t_cross)
+        else:
+            sunset_times.append(t_cross)
+
+    sunrise_times = sorted(sunrise_times)
+    sunset_times = sorted(sunset_times)
+
+    prev_sunrise = max([t for t in sunrise_times if t <= obs_time], default=None)
+    next_sunrise = min([t for t in sunrise_times if t > obs_time], default=None)
+    prev_sunset  = max([t for t in sunset_times if t <= obs_time], default=None)
+    next_sunset  = min([t for t in sunset_times if t > obs_time], default=None)
+
+    # --- moon ---
+    moon_alt = get_moon(times).transform_to(AltAz(obstime=times, location=loc)).alt
+    moon_crossings = numpy.where(numpy.diff(numpy.sign(moon_alt.value)))[0]
+
+    moonrise_times, moonset_times = [], []
+    for c in moon_crossings:
+        t_cross = times[c].to_datetime()
+        if moon_alt[c] < 0 and moon_alt[c+1] > 0:
+            moonrise_times.append(t_cross)
+        else:
+            moonset_times.append(t_cross)
+
+    moonrise_times = sorted(moonrise_times)
+    moonset_times = sorted(moonset_times)
+
+    prev_moonrise = max([t for t in moonrise_times if t <= obs_time], default=None)
+    next_moonrise = min([t for t in moonrise_times if t > obs_time], default=None)
+    prev_moonset  = max([t for t in moonset_times if t <= obs_time], default=None)
+    next_moonset  = min([t for t in moonset_times if t > obs_time], default=None)
+
+    # --- moon phase z ephem (astropy nie ma) ---
+
+    obs = ephem.Observer()
+    obs.lat = lat
+    obs.lon = lon
+    obs.date = str(obs_time)
+
+    moon_ph = ephem.Moon(obs).phase
+
+
+    return {
+        "julian_date": jd,
+        "prev_sunrise": prev_sunrise,
+        "next_sunrise": next_sunrise,
+        "prev_sunset": prev_sunset,
+        "next_sunset": next_sunset,
+        "prev_moonrise": prev_moonrise,
+        "next_moonrise": next_moonrise,
+        "prev_moonset": prev_moonset,
+        "next_moonset": next_moonset,
+        "moon_phase": moon_ph
+    }
