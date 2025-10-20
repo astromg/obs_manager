@@ -5,7 +5,7 @@ obs_elevation: 2817
 master_file: /Users/mgorski/DEVELOPER/GITHUB/tpg
 last_nights_to_mark: 10
 
-columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","h_min","h_max","uobi","sciprog","pi","tag","P","hjd0","min_moon_dist","max_moon_phase","comment","obs_data","ob_time","makro","other"]
+columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","h_min","h_max","uobi","sciprog","pi","tag","P","hjd0","min_moon_dist","max_moon_phase","comment","obs_data","ob_time","makro","mV","other"]
 
 tel:
   wk06:
