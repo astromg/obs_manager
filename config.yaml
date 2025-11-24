@@ -28,3 +28,23 @@ tel:
     mount_type: az
     hmin: 35                                                   # min altitude to observe
     hmax: 80
+
+
+params:
+  name:
+    column: 0
+    description: "some text"
+    required: True
+  ra:
+    column: 1
+    description: "right ascension"
+    special: "ra"
+    required: True
+  ph_mk:
+    column: 5
+    description: "phase mask"
+    limits: [0,1]
+    no_transfer: True
+    required: None
+
+
