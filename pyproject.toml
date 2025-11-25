@@ -20,7 +20,7 @@ scipy = "^1.11"
 numpy = "^1.24.1"
 ephem = "^4.1.4"
 
-tpg = { path = "/Users/mgorski/DEVELOPER/GITHUB/tpg" }
+tpg = { path = "/home/mgorski/src/tpg" }
 
 [tool.poetry.scripts]
 obs_manager = "obs_manager:main"

@@ -28,7 +28,8 @@ from astropy.coordinates import EarthLocation, Angle, get_sun, get_moon
 from astropy.coordinates import SkyCoord, AltAz
 from astropy.table import Table
 
-from tpg.telescope_plan_generator import telescope_plan_generator as tpg
+from tpg.telescope_plan_generator import TelescopePlanGenerator as tpg
+
 
 warnings.simplefilter('ignore', category=AstropyWarning)
 
@@ -1073,7 +1074,7 @@ class TPGWindow(QWidget):
             dt = str(date)
 
         # DUPA
-        self.p = tpg(tel, dt)
+        self.p = tpg(tel, dt, loud=True)
 
         self.p.Initiate()
         self.p.LoadObjects()
