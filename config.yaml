@@ -2,29 +2,34 @@
 obs_longitude: -70.1963
 obs_latitude: -24.598
 obs_elevation: 2817
-master_file: /home/mgorski/src/tpg
+master_file: /home/mgorski/src/tpg/master_files/
 last_nights_to_mark: 10
 
-columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","h_min","h_max","uobi","sciprog","pi","tag","P","hjd0","min_moon_dist","max_moon_phase","comment","obs_data","ob_time","makro","other"]
+columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","h_min","h_max","uobi","sciprog","pi","tag","P","hjd0","min_moon_dist","max_moon_phase","comment","obs_data","ob_time","makro","status","other"]
 
 tel:
   wk06:
-    data_file: ./obs_data/wk06/targets/  # directory with observations
+    data_file: /work/vela/oca/fits/wk06/processed-ofp/targets/  # directory with observations
     mount_type: eq
     hmin: 35                                                   # min altitude to observe
     hmax: 90
   zb08:
-    data_file: ./obs_data/zb08/targets/  # directory with observations
+    data_file: /work/vela/oca/fits/zb08/processed-ofp/targets/  # directory with observations
     mount_type: az
     hmin: 35                                                   # min altitude to observe
     hmax: 80
   jk15:
+    data_file: /work/vela/oca/fits/jk15/processed-ofp/targets/  # directory with observations
+    mount_type: az
+    hmin: 35                                                   # min altitude to observe
+    hmax: 80
+  iris:
     data_file: ./obs_data/jk15/targets/  # directory with observations
     mount_type: az
     hmin: 35                                                   # min altitude to observe
     hmax: 80
   test:
-    data_file: ./obs_data/jk15/targets/  # directory with observations
+    data_file: /work/vela/oca/fits/zb08/processed-ofp/targets/  # directory with observations
     mount_type: az
     hmin: 35                                                   # min altitude to observe
     hmax: 80

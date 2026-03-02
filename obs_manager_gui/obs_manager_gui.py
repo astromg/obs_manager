@@ -4,6 +4,8 @@ import math
 import os,sys
 import datetime
 import uuid
+from operator import index
+
 import yaml
 import requests
 
@@ -29,6 +31,7 @@ from astropy.coordinates import SkyCoord, AltAz
 from astropy.table import Table
 
 from tpg.telescope_plan_generator import TelescopePlanGenerator as tpg
+from .obs_manager_lib import *
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
@@ -199,8 +202,20 @@ class OM_Gui(QWidget):
 
     def load_objects(self):
         self.ob = []
+
+        #newDUPA
+        self.master_data = MasterList()
+
+        #------
+
         with open(self.master_file, 'r') as plik:
             for line in plik:
+
+                #newDUPA
+                self.master_data.add_line(line, self.cfg["columns"])
+                #-------
+
+
                 line = line.strip()
                 tmp={}
                 tmp["line"] = line
@@ -250,6 +265,13 @@ class OM_Gui(QWidget):
                 else:
                     tmp["line"] = "\n"
                     self.ob.append(tmp)
+
+        #newDUPA
+        for k in self.master_data.lines:
+            if k.ob_line:
+                print(k.ob)
+            else:
+                print(k.raw_line)
 
     def plot_sky_map(self):
         try:
@@ -433,34 +455,6 @@ class OM_Gui(QWidget):
             except Exception as e:
                 print(f"Error saving file: {e}")
 
-    def update_data(self):
-        base="https://araucaria.camk.edu.pl/data/ocm/internal/Nzg3N2dVlZmQtNGIy/"
-
-        #zb08 / targets / u_lep / Ic / light - curve / u_lep_Ic_diff_light_curve.txt
-        tel = self.tel_s.currentText()
-        if hasattr(self, "ob"):
-            for ob in self.ob:
-                if "obs_data" in ob.keys():
-                    print(ob["obs_data"])
-                elif "name" in ob.keys():
-                    name = ob["name"].lower()
-                    if "ph_mk" in ob.keys():
-                        filtr = ob["ph_mk"].split("/")[1]
-                    elif "seq" in ob.keys():
-                        filtr = ob["seq"].split("/")[1]
-                    else:
-                        filtr = "V"
-                    path = tel+"/targets/"+name+"/"+filtr+"/light-curve/"+name+"_"+filtr+"_diff_light_curve.txt"
-                    url = base+path
-                    response = requests.get(url)
-                    if response.status_code == 200:
-                        f_name = "./obs_data/"+path
-                        os.makedirs(os.path.dirname(f_name), exist_ok=True)
-                        with open(f_name, "wb") as f:
-                            f.write(response.content)
-                        print(f'file {path.split("/")[-1]} updated!')
-                    else:
-                        print(f'file {path.split("/")[-1]}', response.status_code)
 
     def tpg_show(self):
         self.update_almanac()
@@ -551,7 +545,7 @@ class OM_Gui(QWidget):
         #self.table.setSelectionMode(QTableWidget.SelectionBehavior.SingleSelection)
         self.table.setStyleSheet("selection-background-color: rgb(217,239,217); selection-color: black; ")
 
-        grid.addWidget(self.table, w, 0, 1, 4)
+        grid.addWidget(self.table, w, 0, 1, 6)
 
         w = w + 1
         self.sky_p = QPushButton("Plot SkyMap")
@@ -578,15 +572,12 @@ class OM_Gui(QWidget):
         w = w + 1
         self.load_p = QPushButton("Load file")
         self.load_p.clicked.connect(self.load_file)
-        self.update_p = QPushButton("Update Data")
-        self.update_p.clicked.connect(self.update_data)
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
         self.config_p = QPushButton("\u2699")
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(self.close)
         grid.addWidget(self.load_p, w, 0)
-        grid.addWidget(self.update_p, w, 1)
         grid.addWidget(self.config_p, w, 2)
         grid.addWidget(self.save_p, w, 3)
 
@@ -1301,3 +1292,5 @@ def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
         "next_moonset": next_moonset,
         "moon_phase": moon_ph
     }
+
+
