@@ -116,11 +116,13 @@ class OM_Gui(QWidget):
         self.table.setRowCount(0)
         self.table.clearContents()
         for data in self.master_data:
-            if data["ob"] and data["show"]:
-                i = i + 1
-                data["index"] = i
-                if self.table.rowCount() <= i:
-                    self.table.insertRow(i)  # Dodanie nowego wiersza
+
+            i = i + 1
+            data["index"] = i
+            if self.table.rowCount() <= i:
+                self.table.insertRow(i)  # Dodanie nowego wiersza
+
+            if data["ob"]:
 
                 # pisze ile widoczne i czy teraz widoczne
                 red_znacznik = False
@@ -164,15 +166,15 @@ class OM_Gui(QWidget):
                     self.table.setItem(i, j, item)
                 row_labels.append(row_txt)
 
-            if not data["ob"]:
-                item = QTableWidgetItem(tmp["line"])
+            else:
+                item = QTableWidgetItem(data["line"])
                 item.setForeground(QColor("gray"))
 
                 self.table.setItem(i, 0, item)
                 self.table.setSpan(i, 0, 1, self.table.columnCount())
 
                 row_labels.append(f"{i}")
-                continue
+
 
 
         self.table.setVerticalHeaderLabels(row_labels)
@@ -224,24 +226,26 @@ class OM_Gui(QWidget):
         with open(self.master_file, 'r') as plik:
             for line in plik:
 
-                #newDUPA
                 tmp = {"ob": None, "line": None, "show": None, "ok": None, "index": -2, "edited": None}
 
                 tmp["line"] = line
 
-                txt = f'OBJECT {line}'
-                ob_tmp = ObsPlanParser.convert_from_string(txt)
+                if len(line.strip()) > 0:
+                    if len(line.split()) > 0:
+                        if "#" not in line.split()[0]:
+                            txt = f'OBJECT {line}'
+                            ob_tmp = ObsPlanParser.convert_from_string(txt)
 
-                if ob_tmp is None:
-                    tmp["show"] = True
-                    tmp["ok"] = False
-                else:
-                    ob = ObsValidator.convert_to_obdict(ob_tmp)
-                    if ob:
-                        tmp["ob"] = ob
-                        tmp["show"] = True
-                    else:
-                        tmp["show"] = True
+                            if ob_tmp is None:
+                                tmp["show"] = True
+                                tmp["ok"] = False
+                            else:
+                                ob = ObsValidator.convert_to_obdict(ob_tmp)
+                                if ob:
+                                    tmp["ob"] = ob
+                                    tmp["show"] = True
+                                else:
+                                    tmp["show"] = True
 
                 self.master_data.append(tmp)
 
