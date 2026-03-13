@@ -30,8 +30,13 @@ from astropy.coordinates import EarthLocation, Angle, get_sun, get_moon
 from astropy.coordinates import SkyCoord, AltAz
 from astropy.table import Table
 
+from pyaraucaria.obs_plan.obs_plan_parser import ObsPlanParser
+from pyaraucaria.ob_validator import ObsValidator
+
 from tpg.telescope_plan_generator import TelescopePlanGenerator as tpg
 from .obs_manager_lib import *
+
+
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
@@ -74,27 +79,28 @@ class OM_Gui(QWidget):
         m = "-99"
         tpg = False
         tmp_txt = ""
-        if self.tpg_window:
-            try:
-                tpg_ob = self.tpg_window.p.ob
-                tpg_ind_list = [t["index"] for t in tpg_ob]
 
-                date = self.date_e.date().toPyDate()
-                ut = self.time_e.time().toPyTime()
-                dt = datetime.datetime.combine(date, ut)
-
-                current_time = ephem.Date(dt)
-                tpg_time = self.tpg_window.p.nightTime
-                time_diff = numpy.abs([t - current_time for t in tpg_time])
-
-                m = numpy.argmin(time_diff)
-
-                #print(ephem.Date(current_time),ephem.Date(tpg_time[m]),time_diff[m])
-
-
-                tpg = True
-            except AttributeError:
-                tpg = False
+        # if self.tpg_window:
+        #     try:
+        #         tpg_ob = self.tpg_window.p.ob
+        #         tpg_ind_list = [t["index"] for t in tpg_ob]
+        #
+        #         date = self.date_e.date().toPyDate()
+        #         ut = self.time_e.time().toPyTime()
+        #         dt = datetime.datetime.combine(date, ut)
+        #
+        #         current_time = ephem.Date(dt)
+        #         tpg_time = self.tpg_window.p.nightTime
+        #         time_diff = numpy.abs([t - current_time for t in tpg_time])
+        #
+        #         m = numpy.argmin(time_diff)
+        #
+        #         #print(ephem.Date(current_time),ephem.Date(tpg_time[m]),time_diff[m])
+        #
+        #
+        #         tpg = True
+        #     except AttributeError:
+        #         tpg = False
 
         font = QFont()
         font.setPointSize(10)  # Ustawienie mniejszej czcionki
@@ -104,15 +110,15 @@ class OM_Gui(QWidget):
         for n,col_name in enumerate(self.cfg["columns"]):
             self.table.setHorizontalHeaderItem(n,QTableWidgetItem(col_name))
 
-        for ob in self.ob:
-            ob["index"] = -2
+        for tmp in self.master_data:
+            tmp["index"] = -2
         i = -1
         self.table.setRowCount(0)
         self.table.clearContents()
-        for ob in self.ob:
-            if "name" in ob.keys() and ob["show"] and ob["active"]:
+        for data in self.master_data:
+            if data["ob"] and data["show"]:
                 i = i + 1
-                ob["index"] = i
+                data["index"] = i
                 if self.table.rowCount() <= i:
                     self.table.insertRow(i)  # Dodanie nowego wiersza
 
@@ -120,27 +126,27 @@ class OM_Gui(QWidget):
                 red_znacznik = False
                 row_txt = f'{i}'
 
-                if tpg:
-                    i_tmp = ob["index"]
-                    q = tpg_ind_list.index(i_tmp)
-                    vis = tpg_ob[q]["visibility"]["all"]
-
-                    if not vis[m] and m != 0:
-                        # if "113" in tpg_ob[q]["name"]:
-                        #     print(vis)
-                        #     print(m,vis[m])
-                        red_znacznik = True
-
-                    vis = numpy.array(vis)
-                    t_vis = len(vis[vis])
-                    h_vis = t_vis / 60
-                    m_vis = t_vis - int(h_vis)*60
-
-                    row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
+                # if tpg:
+                #     i_tmp = ob["index"]
+                #     q = tpg_ind_list.index(i_tmp)
+                #     vis = tpg_ob[q]["visibility"]["all"]
+                #
+                #     if not vis[m] and m != 0:
+                #         # if "113" in tpg_ob[q]["name"]:
+                #         #     print(vis)
+                #         #     print(m,vis[m])
+                #         red_znacznik = True
+                #
+                #     vis = numpy.array(vis)
+                #     t_vis = len(vis[vis])
+                #     h_vis = t_vis / 60
+                #     m_vis = t_vis - int(h_vis)*60
+                #
+                #     row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
 
                 for j,key in enumerate(self.cfg["columns"]):
-                    if key in ob.keys():
-                        item = QTableWidgetItem(str(ob[key]))
+                    if key in data["ob"].keys():
+                        item = QTableWidgetItem(str(data["ob"][key]))
                         if red_znacznik:
                             item.setForeground(QColor("red"))
                         else:
@@ -149,14 +155,25 @@ class OM_Gui(QWidget):
 
                     else:
                         item = QTableWidgetItem("")
-                    if "editted" in ob.keys():
-                        if j in ob["editted"]:
+                    if "editted" in data["ob"].keys():
+                        if j in data["ob"]["editted"]:
                             item.setBackground(QColor(170, 220, 240))
-                    if "deactivated" in ob.keys():
-                        if ob["deactivated"]:
+                    if "deactivated" in data["ob"].keys():
+                        if data["ob"]["deactivated"]:
                             item.setBackground(QColor(150, 150, 150))
                     self.table.setItem(i, j, item)
                 row_labels.append(row_txt)
+
+            if not data["ob"]:
+                item = QTableWidgetItem(tmp["line"])
+                item.setForeground(QColor("gray"))
+
+                self.table.setItem(i, 0, item)
+                self.table.setSpan(i, 0, 1, self.table.columnCount())
+
+                row_labels.append(f"{i}")
+                continue
+
 
         self.table.setVerticalHeaderLabels(row_labels)
 
@@ -201,77 +218,33 @@ class OM_Gui(QWidget):
 
 
     def load_objects(self):
-        self.ob = []
 
-        #newDUPA
-        self.master_data = MasterList()
-
-        #------
+        self.master_data = []
 
         with open(self.master_file, 'r') as plik:
             for line in plik:
 
                 #newDUPA
-                self.master_data.add_line(line, self.cfg["columns"])
-                #-------
+                tmp = {"ob": None, "line": None, "show": None, "ok": None, "index": -2, "edited": None}
 
-
-                line = line.strip()
-                tmp={}
                 tmp["line"] = line
-                tmp["show"] = False
-                tmp["active"] = False
-                if len(line.split()) > 0:
 
-                    l = line.strip().split()
-                    if "#" not in l[0]:
-                        tmp["active"] = True
-                        tmp["name"] = l[0]
-                        tmp["ra"] = l[1]
-                        tmp["dec"] = l[2]
-                        tmp["other"] = []
-                        tmp["show"] = True
-                        tmp["index"] = None
-                        tmp["editted"] = []
-                        tmp["pi"] = ""
-                        tmp["sciprog"] = ""
-                        tmp["tag"] = ""
-                        tmp["comment"] = ""
+                txt = f'OBJECT {line}'
+                ob_tmp = ObsPlanParser.convert_from_string(txt)
 
-                        line = line.replace(tmp["name"], "")
-                        line = line.replace(tmp["ra"], "")
-                        line = line.replace(tmp["dec"], "")
-
-                        for x in self.cfg["columns"]:
-                            if x+"=" in line and "comment" not in x:
-                                tmp[x] = line.split(x+"=")[1].split()[0]
-                                line = line.replace(f'{x}={tmp[x]}', "")
-
-                        if "comment=" in line:
-                            comment = line.split("comment=")[1]
-                            if len(comment)>0:
-                                if "\"" == comment[0]:
-                                    comment = comment.split("\"")[1]
-                                    line = line.replace(f'comment=\"{comment}\"', "")
-                                elif "(" == comment[0]:
-                                    comment = comment.split("(")[1].split(")")[0]
-                                    line = line.replace(f'comment=({comment})', "")
-                                else:
-                                    comment = comment.split()[0]
-                                    line = line.replace(f'comment={comment}', "")
-                            tmp["comment"] = comment
-                        tmp["other"] = line.strip()
-                    self.ob.append(tmp)
+                if ob_tmp is None:
+                    tmp["show"] = True
+                    tmp["ok"] = False
                 else:
-                    tmp["line"] = "\n"
-                    self.ob.append(tmp)
+                    ob = ObsValidator.convert_to_obdict(ob_tmp)
+                    if ob:
+                        tmp["ob"] = ob
+                        tmp["show"] = True
+                    else:
+                        tmp["show"] = True
 
-        #newDUPA
-        for k in self.master_data.lines:
-            if k.ob_line:
-                print(k.ob)
-            else:
-                print(k.raw_line)
+                self.master_data.append(tmp)
+
 
     def plot_sky_map(self):
         try:
@@ -545,7 +518,7 @@ class OM_Gui(QWidget):
         #self.table.setSelectionMode(QTableWidget.SelectionBehavior.SingleSelection)
         self.table.setStyleSheet("selection-background-color: rgb(217,239,217); selection-color: black; ")
 
-        grid.addWidget(self.table, w, 0, 1, 6)
+        grid.addWidget(self.table, w, 0, 1, 7)
 
         w = w + 1
         self.sky_p = QPushButton("Plot SkyMap")
@@ -582,7 +555,7 @@ class OM_Gui(QWidget):
         grid.addWidget(self.save_p, w, 3)
 
         w = w + 1
-        grid.addWidget(self.close_p, w, 4)
+        grid.addWidget(self.close_p, w, 4, 1, 3)
 
         self.setLayout(grid)
 
