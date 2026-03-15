@@ -19,9 +19,10 @@ import ephem
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QTextEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QTextEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog, QListWidget, QListWidgetItem, QVBoxLayout, QHBoxLayout
 from PyQt6.QtCore import Qt, QTime, QDate, QDateTime
 from PyQt6.QtGui import QFont, QColor
+
 
 from astropy import units
 from astropy.utils.exceptions import AstropyWarning
@@ -60,6 +61,9 @@ class OM_Gui(QWidget):
 
         #print(self.cfg)
 
+        self.schema_columns = ObsValidator.load_schema("tpg_schema")["properties"].keys()
+        self.columns = ["ok_ob","tpg_vis"] + self.cfg["columns"]
+
         self.tpg_window = None
         self.i = 1
         self.mkUI()
@@ -68,6 +72,18 @@ class OM_Gui(QWidget):
 
 
     def update_table(self):
+
+        show_all = self.showAll_p.isChecked()
+
+        txt1 = self.filter_name_e.text()
+        txt2 = self.filter_other_e.text()
+        txt3 = self.filter_pi_e.text()
+        txt4 = self.filter_sci_e.text()
+        txt5 = self.filter_tag_e.text()
+
+        if len(self.master_data) == 0:
+            return
+
         row_labels = []
 
         try:
@@ -76,9 +92,7 @@ class OM_Gui(QWidget):
         except TypeError:
             pass
 
-        m = "-99"
         tpg = False
-        tmp_txt = ""
 
         # if self.tpg_window:
         #     try:
@@ -106,79 +120,144 @@ class OM_Gui(QWidget):
         font.setPointSize(10)  # Ustawienie mniejszej czcionki
         self.table.setFont(font)
 
-        self.table.setColumnCount(len(self.cfg["columns"]))
-        for n,col_name in enumerate(self.cfg["columns"]):
+        self.table.setColumnCount(len(self.columns))
+        for n,col_name in enumerate(self.columns):
             self.table.setHorizontalHeaderItem(n,QTableWidgetItem(col_name))
 
-        for tmp in self.master_data:
-            tmp["index"] = -2
         i = -1
         self.table.setRowCount(0)
         self.table.clearContents()
         for data in self.master_data:
 
-            i = i + 1
-            data["index"] = i
-            if self.table.rowCount() <= i:
-                self.table.insertRow(i)  # Dodanie nowego wiersza
+            if not show_all and not data["show"]:
+                data["index"] = -2
+            else:
 
-            if data["ob"]:
+                # filtrowanie wyswietlania - lokalnie, bo to tylko czesc wyswietlania
+                show_txt = True
 
-                # pisze ile widoczne i czy teraz widoczne
-                red_znacznik = False
-                row_txt = f'{i}'
+                if not (txt2.lower() in data["line"].lower()):
+                    show_txt = False
 
-                # if tpg:
-                #     i_tmp = ob["index"]
-                #     q = tpg_ind_list.index(i_tmp)
-                #     vis = tpg_ob[q]["visibility"]["all"]
-                #
-                #     if not vis[m] and m != 0:
-                #         # if "113" in tpg_ob[q]["name"]:
-                #         #     print(vis)
-                #         #     print(m,vis[m])
-                #         red_znacznik = True
-                #
-                #     vis = numpy.array(vis)
-                #     t_vis = len(vis[vis])
-                #     h_vis = t_vis / 60
-                #     m_vis = t_vis - int(h_vis)*60
-                #
-                #     row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
+                if data["ob"]:
+                    if not (txt1.lower() in data["ob"].get("name", "").lower()):
+                        show_txt = False
+                    if not (txt3.lower() in data["ob"].get("pi", "").lower()):
+                        show_txt = False
+                    if not (txt4.lower() in data["ob"].get("sciprog", "").lower()):
+                        show_txt = False
+                    if not (txt5.lower() in data["ob"].get("tag", "").lower()):
+                        show_txt = False
 
-                for j,key in enumerate(self.cfg["columns"]):
-                    if key in data["ob"].keys():
-                        item = QTableWidgetItem(str(data["ob"][key]))
-                        if red_znacznik:
-                            item.setForeground(QColor("red"))
-                        else:
-                            item.setForeground(QColor("black"))
+                if show_txt:
 
+                    i = i + 1
+                    data["index"] = i
+                    if self.table.rowCount() <= i:
+                        self.table.insertRow(i)  # Dodanie nowego wiersza
+
+                    if data["ob"]:
+
+                        # pisze ile widoczne i czy teraz widoczne
+                        red_znacznik = False
+                        row_txt = f'{i}'
+
+                        # if tpg:
+                        #     i_tmp = ob["index"]
+                        #     q = tpg_ind_list.index(i_tmp)
+                        #     vis = tpg_ob[q]["visibility"]["all"]
+                        #
+                        #     if not vis[m] and m != 0:
+                        #         # if "113" in tpg_ob[q]["name"]:
+                        #         #     print(vis)
+                        #         #     print(m,vis[m])
+                        #         red_znacznik = True
+                        #
+                        #     vis = numpy.array(vis)
+                        #     t_vis = len(vis[vis])
+                        #     h_vis = t_vis / 60
+                        #     m_vis = t_vis - int(h_vis)*60
+                        #
+                        #     row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
+
+                        for j,key in enumerate(self.columns):
+
+                            if key in data["ob"].keys():
+                                item = QTableWidgetItem(str(data["ob"][key]))
+                                red_bkg = False
+                                if "validator" in data.keys():
+                                    if key in data["validator"]["result"]:
+                                        if not data["validator"]["result"][key]:
+                                            red_bkg = True
+
+                                # if red_znacznik:
+                                #     item.setForeground(QColor("red"))
+                                # else:
+                                #     item.setForeground(QColor("black"))
+
+                                if red_bkg:
+                                    item.setBackground(QColor("darkRed"))  # jasnoszare tło
+                                else:
+                                    item.setBackground(QColor("white"))
+
+                            else:
+                                if key == "ok_ob":
+                                    txt = ""
+                                    if "validator" in data.keys():
+                                        if len(data["edited"])>0:
+                                            txt += "\u270E"
+                                        elif data["validator"]["valid"]:
+                                            txt += "✅"
+                                        else:
+                                            txt += "❌"
+
+                                    item = QTableWidgetItem(txt)
+                                    item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                    item.setBackground(QColor("lightGray"))
+                                elif key == "tpg_vis":
+
+                                    vis = data["tpg"].get("visibility",None)
+                                    if vis:
+                                        vis = numpy.array(vis["all"])
+                                        t_vis = len(vis[vis])
+                                        h_vis = t_vis / 60
+                                        m_vis = t_vis - int(h_vis) * 60
+                                        txt = f'{int(h_vis)}h {m_vis}m'
+
+                                        item = QTableWidgetItem(txt)
+                                        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                        item.setBackground(QColor("lightGreen"))
+                                else:
+                                    item = QTableWidgetItem("")
+
+
+                            if key in data["edited"]:
+                                item.setBackground(QColor(170, 220, 240))
+
+                            # if "deactivated" in data["ob"].keys():
+                            #     if data["ob"]["deactivated"]:
+                            #         item.setBackground(QColor(150, 150, 150))
+
+
+                            self.table.setItem(i, j, item)
+                        #row_labels.append(row_txt)
 
                     else:
-                        item = QTableWidgetItem("")
-                    if "editted" in data["ob"].keys():
-                        if j in data["ob"]["editted"]:
-                            item.setBackground(QColor(170, 220, 240))
-                    if "deactivated" in data["ob"].keys():
-                        if data["ob"]["deactivated"]:
-                            item.setBackground(QColor(150, 150, 150))
-                    self.table.setItem(i, j, item)
-                row_labels.append(row_txt)
 
-            else:
-                item = QTableWidgetItem(data["line"])
-                item.setForeground(QColor("gray"))
+                        item = QTableWidgetItem(data["line"])
+                        if data["parser_error"]:
+                            item.setForeground(QColor("red"))
+                        else:
+                            item.setForeground(QColor("gray"))
 
-                self.table.setItem(i, 0, item)
-                self.table.setSpan(i, 0, 1, self.table.columnCount())
+                        self.table.setItem(i, 0, item)
+                        self.table.setSpan(i, 0, 1, self.table.columnCount())
 
-                row_labels.append(f"{i}")
-
-
+                        row_labels.append(f"{i}")
+                else:
+                    data["index"] = -2
 
         self.table.setVerticalHeaderLabels(row_labels)
-
         self.table.resizeColumnsToContents()
         max_column_width = 100  # Maksymalna szerokość kolumny
         for col in range(self.table.columnCount()):
@@ -186,37 +265,6 @@ class OM_Gui(QWidget):
 
         self.table.cellChanged.connect(self.data_edit)
         self.table.cellClicked.connect(self.pocisniecie_tabelki)
-
-    def filter_changed(self):
-        txt1 = self.filter_name_e.text()
-        txt2 = self.filter_other_e.text()
-        txt3 = self.filter_pi_e.text()
-        txt4 = self.filter_sci_e.text()
-        txt5 = self.filter_tag_e.text()
-        for ob in self.ob:
-            ob["show"] = True
-            if "name" in ob.keys():
-                if txt1.lower() in ob["name"].lower():
-                    pass
-                else:
-                    ob["show"] = False
-                if txt2.lower() in str(ob["line"]).lower():
-                    pass
-                else:
-                    ob["show"] = False
-                if txt3.lower() in str(ob["pi"]).lower():
-                    pass
-                else:
-                    ob["show"] = False
-                if txt4.lower() in str(ob["sciprog"]).lower():
-                    pass
-                else:
-                    ob["show"] = False
-                if txt5.lower() in str(ob["tag"]).lower():
-                    pass
-                else:
-                    ob["show"] = False
-        self.update_table()
 
 
     def load_objects(self):
@@ -226,7 +274,7 @@ class OM_Gui(QWidget):
         with open(self.master_file, 'r') as plik:
             for line in plik:
 
-                tmp = {"ob": None, "line": None, "show": None, "ok": None, "index": -2, "edited": None}
+                tmp = {"ob": None, "line": None, "show": None, "parser_error": None, "index": -2, "edited": [], "tpg":{}}
 
                 tmp["line"] = line
 
@@ -238,14 +286,15 @@ class OM_Gui(QWidget):
 
                             if ob_tmp is None:
                                 tmp["show"] = True
-                                tmp["ok"] = False
+                                tmp["parser_error"] = True
+                                print("*** parser error ***")
                             else:
                                 ob = ObsValidator.convert_to_obdict(ob_tmp)
                                 if ob:
                                     tmp["ob"] = ob
                                     tmp["show"] = True
                                 else:
-                                    tmp["show"] = True
+                                    tmp["show"] = False
 
                 self.master_data.append(tmp)
 
@@ -261,15 +310,16 @@ class OM_Gui(QWidget):
 
     def plot_data(self):
         i = int(self.table.currentRow())
-        i_tab = [int(ob["index"]) for ob in self.ob]
+        i_tab = [int(data["index"]) for data in self.master_data]
 
         try:
             n = i_tab.index(i)
-            target = self.ob[n]["name"]
+            target = self.master_data[n]["ob"]["name"]
 
-            self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.ob[n])
+            self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.master_data[n])
             self.phase_window.show()
             self.phase_window.raise_()
+
         except ValueError:
             pass
 
@@ -349,43 +399,37 @@ class OM_Gui(QWidget):
             pass
 
     def data_edit(self,i_selected,j_selected):
+        indx = [x["index"] for x in self.master_data]
+        key = self.columns[j_selected]
+        txt = self.table.item(i_selected, j_selected).text()
+
         if self.all_c.isChecked():
-            key = self.cfg["columns"][j_selected]
-            txt = self.table.item(i_selected, j_selected).text()
-            indx = [x["index"] for x in self.ob]
             for n in range(self.table.rowCount()):
                 i = indx.index(n)
-                self.ob[i][key] = txt
-                self.ob[i]["editted"].append(j_selected)
-            self.update_table()
+                if self.master_data[i].get("ob",None):
+                    self.master_data[i]["ob"][key] = txt
+                    self.master_data[i].setdefault("edited", []).append(key)
+                    self.update_table()
             self.all_c.setChecked(False)
         else:
-            indx = [x["index"] for x in self.ob]
             i = indx.index(i_selected)
-            key = self.cfg["columns"][j_selected]
-            self.ob[i][key] = self.table.item(i_selected, j_selected).text()
-            self.ob[i]["editted"].append(j_selected)
-            self.update_table()
+            if self.master_data[i].get("ob",None):
+                self.master_data[i]["ob"][key] = txt
+                self.master_data[i].setdefault("edited", []).append(key)
+        self.update_table()
 
     def copy_ob(self):
-        indx = [x["index"] for x in self.ob]
+        indx = [x["index"] for x in self.master_data]
         i = indx.index(self.i)
-        tmp = copy.deepcopy(self.ob[i])
-        self.ob.insert(i + 1, tmp)
-        if "uobi" in self.ob[i+1].keys():
-            if len(self.ob[i+1]["uobi"])>2:
-                self.ob[i+1]["uobi"] = str(uuid.uuid4())[:8]
-        for j,_ in enumerate(self.ob[i+1].keys()):
-            self.ob[i+1]["editted"].append(j)
+        tmp = copy.deepcopy(self.master_data[i])
+        self.master_data.insert(i + 1, tmp)
+        if self.master_data[i+1]["ob"].get("uobi",None):
+            if len(self.master_data[i+1]["ob"]["uobi"])>2:
+                self.master_data[i+1]["ob"]["uobi"] = str(uuid.uuid4())[:8]
         self.update_table()
 
     def deactivate(self):
-        indx = [x["index"] for x in self.ob]
-        i = indx.index(self.i)
-        tmp = copy.deepcopy(self.ob[i])
-        self.ob[i]["deactivated"] = True
-        self.ob[i]["name"] = "# "+self.ob[i]["name"]
-        self.update_table()
+        pass
 
     def save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
@@ -425,7 +469,6 @@ class OM_Gui(QWidget):
                             txt = txt + "\n"
 
 
-# columns:  ["uobi","sciprog","pi","tag","other"]
                     #print(txt)
                     file.write(txt)
                     print(f'objects saved to {file_path}')
@@ -433,10 +476,28 @@ class OM_Gui(QWidget):
                 print(f"Error saving file: {e}")
 
 
+    def validate_ob(self):
+        BASE_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+        COMMAND_RULES = ObsValidator.load_schema("command_rules.yaml")
+
+        for i,data in enumerate(self.master_data):
+            data["edited"] = []
+            if data["ob"]:
+                ob = data["ob"]
+                validator = ObsValidator(BASE_SCHEMA, COMMAND_RULES)
+                result = validator.validate_ob(ob)
+
+                if "validator" not in data:
+                    data["validator"] = {}
+
+                data["validator"]["valid"] = result["valid"]
+                data["validator"]["result"] = result["result"]
+        self.update_table()
+
+
     def tpg_show(self):
         self.update_almanac()
         self.tpg_window = TPGWindow(self)
-
 
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
@@ -446,6 +507,14 @@ class OM_Gui(QWidget):
             for t in self.cfg["tel"].keys():
                 if t in self.master_file:
                     self.tel_s.setCurrentText(t)
+            self.update_table()
+
+    def open_config(self):
+        dialog = ColumnConfigDialog(self.schema_columns, self.columns)
+
+        if dialog.exec():
+            new_columns = dialog.get_columns()
+            self.columns = new_columns
             self.update_table()
 
     def mkUI(self):
@@ -481,33 +550,33 @@ class OM_Gui(QWidget):
         w = w + 1
         self.filter_name_l = QLabel("Filter NAME")
         self.filter_name_e = QLineEdit("")
-        self.filter_name_e.textChanged.connect(self.filter_changed)
+        self.filter_name_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_name_l, w, 0)
         grid.addWidget(self.filter_name_e, w, 1)
 
         self.filter_sci_l = QLabel("Filter SCIPROG")
         self.filter_sci_e = QLineEdit("")
-        self.filter_sci_e.textChanged.connect(self.filter_changed)
+        self.filter_sci_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_sci_l, w, 2)
         grid.addWidget(self.filter_sci_e, w, 3)
 
         w = w + 1
         self.filter_pi_l = QLabel("Filter PI")
         self.filter_pi_e = QLineEdit("")
-        self.filter_pi_e.textChanged.connect(self.filter_changed)
+        self.filter_pi_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_pi_l, w, 0)
         grid.addWidget(self.filter_pi_e, w, 1)
 
         self.filter_tag_l = QLabel("Filter TAG")
         self.filter_tag_e = QLineEdit("")
-        self.filter_tag_e.textChanged.connect(self.filter_changed)
+        self.filter_tag_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_tag_l, w, 2)
         grid.addWidget(self.filter_tag_e, w, 3)
 
         w = w + 1
-        self.filter_other_l = QLabel("Filter OB")
+        self.filter_other_l = QLabel("Filter TXT")
         self.filter_other_e = QLineEdit("")
-        self.filter_other_e.textChanged.connect(self.filter_changed)
+        self.filter_other_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_other_l, w, 0)
         grid.addWidget(self.filter_other_e, w, 1)
 
@@ -515,6 +584,10 @@ class OM_Gui(QWidget):
         self.all_c.setChecked(False)
         grid.addWidget(self.all_c, w, 3)
 
+        self.showAll_p = QCheckBox("Show All")
+        self.showAll_p.setChecked(True)
+        grid.addWidget(self.showAll_p, w, 4)
+        self.showAll_p.stateChanged.connect(self.update_table)
 
         w = w + 1
         self.table = QTableWidget()
@@ -533,11 +606,16 @@ class OM_Gui(QWidget):
         self.deactivate_p.clicked.connect(self.deactivate)
         grid.addWidget(self.deactivate_p, w, 0)
 
-        self.deactivate_p = QPushButton("TPG")
-        self.deactivate_p.clicked.connect(self.tpg_show)
-        grid.addWidget(self.deactivate_p, w, 1)
+        self.validate_p = QPushButton("Validate OB")
+        self.validate_p.clicked.connect(self.validate_ob)
+        grid.addWidget(self.validate_p, w, 1)
 
         w = w + 1
+
+        self.tpg_p = QPushButton("TPG")
+        self.tpg_p.clicked.connect(self.tpg_show)
+        grid.addWidget(self.tpg_p, w, 1)
+
         self.data_p = QPushButton("Plot data")
         self.data_p.clicked.connect(self.plot_data)
         grid.addWidget(self.data_p, w, 3)
@@ -552,6 +630,7 @@ class OM_Gui(QWidget):
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
         self.config_p = QPushButton("\u2699")
+        self.config_p.clicked.connect(self.open_config)
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(self.close)
         grid.addWidget(self.load_p, w, 0)
@@ -565,13 +644,18 @@ class OM_Gui(QWidget):
 
         self.show()
 
+
+# #################################
+#           Phase Window
+# #################################
+
 class PhaseWindow(QWidget):
-    def __init__(self, parent, target, data_dir, ob):
+    def __init__(self, parent, target, data_dir, data):
         super(PhaseWindow, self).__init__()
         self.parent = parent
         self.target = target
         self.data_dir = data_dir
-        self.ob = ob
+        self.ob = data["ob"]
 
         self.setStyleSheet("font-size: 11pt;")
         self.setMinimumSize(1200,600)
@@ -589,12 +673,36 @@ class PhaseWindow(QWidget):
         self.filters = os.listdir(self.f_path)
         self.file_s.addItems(self.filters)
 
+    def parse_time(self,t):
+        if not t:
+            return None
+
+        if "T" in t:
+            t = t.replace("T", " ")
+
+        if "/" not in t:  # tylko HH:MM
+            date = str(self.obs_time).split()[0]
+
+            start_hour = int(str(self.obs_time).split()[1].split(":")[0])
+            t_hour = int(t.split(":")[0])
+
+            if start_hour > 16 and t_hour < 16:
+                date = ephem.Date(date) + 1
+                date = str(ephem.Date(date)).split()[0]
+
+            t = date + " " + t
+
+        tmp = str(ephem.Date(t)).replace("/", "-")
+        return Time(tmp, format="iso").jd
+
     def refresh(self):
 
-        obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
-        time = Time(obs_time, scale='utc')
+        self.obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
+        time = Time(self.obs_time, scale='utc')
         self.current_jd = time.jd
         jd3h = self.current_jd + numpy.arange(1,7,1)/24.
+
+        time_range = Time(numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 100), format="jd")
 
 
         txt = f'moon phase: {self.parent.almanac["moon_phase"]:.0f} %'
@@ -610,7 +718,7 @@ class PhaseWindow(QWidget):
         else:
             hmin = self.parent.cfg["tel"][self.parent.tel]["hmin"]
 
-        if self.ob.get("h_min", False):
+        if self.ob.get("h_max", False):
             hmax = float(self.ob["h_max"])
         else:
             hmax = self.parent.cfg["tel"][self.parent.tel]["hmax"]
@@ -621,14 +729,13 @@ class PhaseWindow(QWidget):
         self.axes2.axvline(x=self.current_jd, color="blue")
         self.axes2.axhspan(-20, 0, xmin=0, xmax=1, facecolor='red', alpha=0.1)
         self.axes2.axhspan(0, hmin, xmin=0, xmax=1, facecolor='black', alpha=0.05)
-        if self.parent.cfg["tel"][self.parent.tel]["mount_type"] == "az":
-            self.axes2.axhspan(hmax, 90, xmin=0, xmax=1, facecolor='black', alpha=0.1)
+        self.axes2.axhspan(hmax, 90, xmin=0, xmax=1, facecolor='black', alpha=0.05)
 
         i = int(self.parent.table.currentRow())
-        i_tab = [int(ob["index"]) for ob in self.parent.ob]
+        i_tab = [int(data["index"]) for data in self.parent.master_data]
         n = i_tab.index(i)
-        ra = self.parent.ob[n]["ra"]
-        dec = self.parent.ob[n]["dec"]
+        ra = self.parent.master_data[n]["ob"]["ra"]
+        dec = self.parent.master_data[n]["ob"]["dec"]
 
         obs_location = EarthLocation(lat=self.parent.cfg["obs_latitude"], lon=self.parent.cfg["obs_longitude"], height=self.parent.cfg["obs_elevation"])
         object = SkyCoord(ra=ra, dec=dec, unit=('hourangle', 'deg'), frame='icrs')
@@ -653,8 +760,23 @@ class PhaseWindow(QWidget):
 
         self.axes2.plot(time_range.jd,alt,"-g")
         self.axes2.plot(time_range.jd, sun_alt, "--y")
-        self.axes2.plot(time_range.jd, moon_alt, "--k")
+        self.axes2.plot(time_range.jd, moon_alt, ":k")
         #self.axes2.add_patch(Rectangle((0, 0), 0.5, 10, facecolor='yellow', alpha=0.5))
+
+        t_start = self.parse_time(self.ob.get("t_start",None))
+        t_end = self.parse_time(self.ob.get("t_end",None))
+
+        xmin = time_range.jd[0]
+        xmax = time_range.jd[-1]
+
+        if t_start:
+            self.axes2.axvspan(xmin, t_start, color="gray", alpha=0.15)
+
+        if t_end:
+            self.axes2.axvspan(t_end, xmax, color="gray", alpha=0.15)
+
+
+        # wykres z danymi (gorny)
 
         self.axes.clear()
         try:
@@ -900,7 +1022,6 @@ class SkyWindow(QWidget):
         #self.axes.bar(0, self.rmax - 90, width=2 * math.pi, bottom=90, color='k', alpha=0.05)  # tutaj zmienia sie pasek ponizej horyzoontu
         self.axes.set_rlim([-90,90+self.parent.cfg["obs_latitude"]])
 
-
         self.axes2.clear()
         self.axes2.set_theta_direction(-1)
         self.axes2.set_theta_zero_location('N')
@@ -910,13 +1031,27 @@ class SkyWindow(QWidget):
         self.axes2.set_rticks([0, 20, 40, 60, 90])
         self.axes2.set_yticklabels(["", "", "", "", ""])
 
-
         obs_location = EarthLocation(lat=self.parent.cfg["obs_latitude"], lon=self.parent.cfg["obs_longitude"], height=self.parent.cfg["obs_elevation"])  # Warszawa
 
         obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
 
-        ra = [x["ra"] for x in self.parent.ob if x["show"] and "ra" in x.keys()]
-        dec = [x["dec"] for x in self.parent.ob if x["show"] and "dec" in x.keys()]
+        ra = []
+        dec = []
+        self.indx = []
+
+        tabel_elements = range(self.parent.table.rowCount())
+        ob_ind = [d["index"] for d in self.parent.master_data]
+        for te in tabel_elements:
+            ti = ob_ind.index(te)
+            data = self.parent.master_data[ti]
+            if data.get("ob",None):
+                r = data["ob"].get("ra",None)
+                d = data["ob"].get("dec",None)
+                if r and d:
+                    i = data["index"]
+                    ra.append(r)
+                    dec.append(d)
+                    self.indx.append(i)
 
         coords = SkyCoord(ra=ra, dec=dec, unit=('hourangle', 'deg'), frame='icrs')
         altaz = coords.transform_to(AltAz(obstime=Time(obs_time), location=obs_location))
@@ -925,7 +1060,14 @@ class SkyWindow(QWidget):
         self.altitude = altaz.alt.deg
         self.azimuth_rad = numpy.radians(azimuth)
         self.axes2.scatter(self.azimuth_rad, self.altitude,marker="*", c='green')
-        self.axes2.plot(self.azimuth_rad[self.parent.i],self.altitude[self.parent.i],"*r")
+
+        if self.parent.i in self.indx:
+            n = self.indx.index(self.parent.i)
+        else:
+            n = -2
+
+        if n > -1:
+            self.axes2.plot(self.azimuth_rad[n],self.altitude[n],"*r")
 
         self.axes2.set_rlim([90, 0])
 
@@ -936,7 +1078,8 @@ class SkyWindow(QWidget):
         self.dec_deg =  Angle(dec, unit="deg").deg
         self.ha_rad = numpy.radians(ha)
         self.axes.scatter(self.ha_rad, self.dec_deg,marker="*", c='green', s=50)
-        self.axes.plot(self.ha_rad[self.parent.i],self.dec_deg[self.parent.i],"*r")
+        if n > -1:
+            self.axes.plot(self.ha_rad[n],self.dec_deg[n],"*r")
 
         altaz_frame = AltAz(obstime=Time(obs_time,scale='utc', location=obs_location), location=obs_location)
         azimuths = numpy.linspace(0, 360, 360) * units.deg
@@ -995,7 +1138,7 @@ class SkyWindow(QWidget):
                     delta = (h1 ** 2 + h2 ** 2 - 2 * h1 * h2 * numpy.cos(a1 - a2)) ** 0.5
                     min_i = numpy.argmin(delta)
                     if delta[min_i] < 15:
-                        self.parent.i = min_i
+                        self.parent.i = self.indx[min_i]
                         self.updateMap()
                         self.parent.update_selection()
 
@@ -1007,9 +1150,13 @@ class SkyWindow(QWidget):
                     delta = (h1 ** 2 + h2 ** 2 - 2 * h1 * h2 * numpy.cos(a1 - a2)) ** 0.5
                     min_i = numpy.argmin(delta)
                     if delta[min_i] < 50:
-                        self.parent.i = min_i
+                        self.parent.i = self.indx[min_i]
                         self.updateMap()
                         self.parent.update_selection()
+
+# ######################
+#        TPG
+# ######################
 
 
 class TPGWindow(QWidget):
@@ -1033,6 +1180,8 @@ class TPGWindow(QWidget):
 
         t0 = datetime.datetime.combine(date, ut)
 
+        # DUPA
+        # tu nie liczy sie dobrze
         t1 = self.parent.almanac["next_sunset"]
         t2 = self.parent.almanac["prev_sunset"]
 
@@ -1041,71 +1190,83 @@ class TPGWindow(QWidget):
         else:
             dt = str(date)
 
-        # DUPA
         self.p = tpg(tel, dt, loud=True)
 
         self.p.Initiate()
         self.p.LoadObjects()
         self.p.ob = []
-        for n,ob in enumerate(self.parent.ob):
-            if "active" in ob.keys() and "show" in ob.keys():
-                if ob["active"] and ob["show"]:
-                    line = ob["line"]
-                    tmp_ob = self.p.parseObjects(line)
-                    tmp_ob["index"] = ob["index"]
-
-                    # if "min_moon_dist" in tmp_ob.keys():
-                    #     print(tmp_ob["min_moon_dist"])
-
-                    self.p.ob.append(tmp_ob)
+        for n,data in enumerate(self.parent.master_data):
+            if data.get("ob",None):
+                line = ObsValidator.convert_from_obdict(data.get("ob"))
+                line = line.split(" ", 1)[1]
+                tmp_ob = self.p.parseObjects(line)
+                tmp_ob["index"] = n
+                self.p.ob.append(tmp_ob)
         self.p.MakeTime()
 
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
-
-
     def calc_vis(self):
         self.p.CalcObject()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
+                self.parent.master_data[ob["index"]]["tpg"]["nightTime"] = self.p.nightTime
         self.parent.update_table()
-        # for n,ob in enumerate(self.p.ob):
-        #     if "visibility" in ob.keys():
-        #         print(ob["name"])
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_moon(self):
         self.p.MaskMoon()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_wind(self):
         self.p.MaskWind()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_cycle(self):
         self.p.MaskCycle()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_startend(self):
         self.p.MaskStartEnd()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_phstartend(self):
         self.p.MaskPhaseStartEnd()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
     def mask_phase(self):
         self.p.MaskPhase()
+        for n,ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
@@ -1271,3 +1432,62 @@ def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
     }
 
 
+
+
+
+class ColumnConfigDialog(QDialog):
+
+    def __init__(self, all_columns, visible_columns=None, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Configure Columns")
+
+        if visible_columns is None:
+            visible_columns = all_columns
+
+        layout = QVBoxLayout(self)
+
+        self.list = QListWidget()
+        self.list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+
+        layout.addWidget(self.list)
+
+        # najpierw widoczne kolumny w zapisanej kolejności
+        for name in visible_columns:
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            self.list.addItem(item)
+
+        # potem niewidoczne
+        for name in all_columns:
+            if name not in visible_columns:
+                item = QListWidgetItem(name)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
+                self.list.addItem(item)
+
+        buttons = QHBoxLayout()
+
+        ok = QPushButton("OK")
+        cancel = QPushButton("Cancel")
+
+        ok.clicked.connect(self.accept)
+        cancel.clicked.connect(self.reject)
+
+        buttons.addWidget(ok)
+        buttons.addWidget(cancel)
+
+        layout.addLayout(buttons)
+
+    def get_columns(self):
+
+        result = []
+
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+
+            if item.checkState() == Qt.CheckState.Checked:
+                result.append(item.text())
+
+        return result
