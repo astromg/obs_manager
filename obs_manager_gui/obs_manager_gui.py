@@ -46,11 +46,10 @@ class OM_Gui(QWidget):
     def __init__(self, args, parent=None):
         super().__init__()
 
+        self.inactive_statuses = ["deactivated","inactive"]
+
         self.cwd = os.getcwd()  # curent working directory
         self.pwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # app location
-
-        #print(self.cwd)
-        #print(self.pwd)
 
         if os.path.exists(self.pwd+'/config.yaml'):
             with open(self.pwd+'/config.yaml', 'r') as cfg_file:
@@ -158,28 +157,6 @@ class OM_Gui(QWidget):
 
                     if data["ob"]:
 
-                        # pisze ile widoczne i czy teraz widoczne
-                        red_znacznik = False
-                        row_txt = f'{i}'
-
-                        # if tpg:
-                        #     i_tmp = ob["index"]
-                        #     q = tpg_ind_list.index(i_tmp)
-                        #     vis = tpg_ob[q]["visibility"]["all"]
-                        #
-                        #     if not vis[m] and m != 0:
-                        #         # if "113" in tpg_ob[q]["name"]:
-                        #         #     print(vis)
-                        #         #     print(m,vis[m])
-                        #         red_znacznik = True
-                        #
-                        #     vis = numpy.array(vis)
-                        #     t_vis = len(vis[vis])
-                        #     h_vis = t_vis / 60
-                        #     m_vis = t_vis - int(h_vis)*60
-                        #
-                        #     row_txt = row_txt + f' ({int(h_vis)}h {m_vis}m) '
-
                         for j,key in enumerate(self.columns):
 
                             if key in data["ob"].keys():
@@ -189,11 +166,6 @@ class OM_Gui(QWidget):
                                     if key in data["validator"]["result"]:
                                         if not data["validator"]["result"][key]:
                                             red_bkg = True
-
-                                # if red_znacznik:
-                                #     item.setForeground(QColor("red"))
-                                # else:
-                                #     item.setForeground(QColor("black"))
 
                                 if red_bkg:
                                     item.setBackground(QColor("darkRed"))  # jasnoszare tło
@@ -234,13 +206,12 @@ class OM_Gui(QWidget):
                             if key in data["edited"]:
                                 item.setBackground(QColor(170, 220, 240))
 
-                            # if "deactivated" in data["ob"].keys():
-                            #     if data["ob"]["deactivated"]:
-                            #         item.setBackground(QColor(150, 150, 150))
+                            if data["ob"].get("status",None):
+                                if data["ob"]["status"] in self.inactive_statuses:
+                                    item.setBackground(QColor(150, 150, 150))
 
 
                             self.table.setItem(i, j, item)
-                        #row_labels.append(row_txt)
 
                     else:
 
@@ -656,6 +627,7 @@ class PhaseWindow(QWidget):
         self.target = target
         self.data_dir = data_dir
         self.ob = data["ob"]
+        self.data = data
 
         self.setStyleSheet("font-size: 11pt;")
         self.setMinimumSize(1200,600)
@@ -783,6 +755,10 @@ class PhaseWindow(QWidget):
             filter = self.file_s.currentText()
             file = self.f_path+"/"+filter+"/light-curve/"+self.target.lower()+"_"+filter+"_diff_light_curve.txt"
 
+            if self.ob.get("obs_data",None):
+                file = self.ob.get("obs_data",None)
+
+
             mag = []
             jd = []
             flag = []
@@ -807,6 +783,7 @@ class PhaseWindow(QWidget):
                     end_cycle =  last_jd + float(self.ob["cycle"])
                     plot_cycle = True
 
+                self.now_t = self.current_jd
                 if self.phase_c.isChecked():
 
                     plot_cycle = False
@@ -820,7 +797,7 @@ class PhaseWindow(QWidget):
 
                         jd = (numpy.array(jd) - float(self.jd0))/float(self.P)%1
 
-                        self.current_jd = (self.current_jd - float(self.jd0))/float(self.P)%1
+                        self.now_t = (self.current_jd - float(self.jd0))/float(self.P)%1
                         jd3h = (jd3h - float(self.jd0))/float(self.P)%1
 
                         if "ph_start" in self.ob.keys() and "ph_end" in self.ob.keys():
@@ -908,7 +885,8 @@ class PhaseWindow(QWidget):
                 d = 0.1*(max(mag)-min(mag))
                 self.axes.set_ylim(max(mag)+d,min(mag)-d)
 
-                self.axes.axvline(x=self.current_jd, color="blue")
+
+                self.axes.axvline(x=self.now_t, color="blue")
                 i_tmp = 1.
                 for x in jd3h:
                     i_tmp += 1
@@ -920,12 +898,40 @@ class PhaseWindow(QWidget):
                     if plot_cycle:
                         self.axes.fill_between([last_jd, end_cycle],min(mag), max(mag),color='red', alpha=0.1)
 
-                    if end_cycle > int(self.current_jd):
-                        self.axes2.fill_between([int(self.current_jd), end_cycle],-20, 90,color='red', alpha=0.1)
+                    if end_cycle > int(self.now_t):
+                        self.axes2.fill_between([int(self.now_t), end_cycle],-20, 90,color='red', alpha=0.1)
 
 
         except (FileNotFoundError,ValueError) as e:
             print(f"Phase Window Error: {e}")
+
+        # wykres tpg
+        self.axes3.clear()
+        if self.data.get("tpg",None):
+            nt = self.data["tpg"].get("nightTime",None)
+            vis_list = self.data["tpg"].get("visibility",None)
+            if nt and vis_list:
+                nt = numpy.array(nt) + 2415020
+                for i, (label, values) in enumerate(vis_list.items()):
+                    green_segments = []
+                    red_segments = []
+                    for j in range(len(values) - 1):
+                        x = nt[j]
+                        width = nt[j + 1] - nt[j]
+                        if values[j]:
+                            green_segments.append((x, width))
+                        else:
+                            red_segments.append((x, width))
+                    if green_segments:
+                        self.axes3.broken_barh(green_segments,(i - 0.8 / 2, 0.8),facecolors='green',alpha=0.3)
+                    if red_segments:
+                        self.axes3.broken_barh(red_segments,(i - 0.8 / 2, 0.8),facecolors='red',alpha=0.3)
+
+                self.axes3.axvline(x=self.current_jd, color="blue")
+                self.axes3.set_yticks(range(len(vis_list)))
+                self.axes3.set_yticklabels(vis_list.keys())
+
+                self.axes3.set_xlim(self.axes.get_xlim())
 
         self.fig.tight_layout()
         self.canvas.draw()
@@ -951,8 +957,9 @@ class PhaseWindow(QWidget):
 
         self.fig = Figure((2.0, 2.0), linewidth=-1, dpi=100)
         self.canvas = FigureCanvas(self.fig)
-        self.axes = self.fig.add_subplot(211)
-        self.axes2 = self.fig.add_subplot(212)
+        self.axes = self.fig.add_subplot(311)
+        self.axes2 = self.fig.add_subplot(312)
+        self.axes3 = self.fig.add_subplot(313)
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.ephem_e, 0, 1)
         grid.addWidget(self.moon_sep_e, 0, 2)
@@ -1005,6 +1012,7 @@ class SkyWindow(QWidget):
 
         self.setLayout(grid)
     def updateMap(self):
+
         self.axes.clear()
         #self.axes.set_theta_direction(-1)
         self.axes.set_theta_zero_location('N')
@@ -1185,10 +1193,12 @@ class TPGWindow(QWidget):
         t1 = self.parent.almanac["next_sunset"]
         t2 = self.parent.almanac["prev_sunset"]
 
-        if (t1 - t0) > (t2 - t0):
-            dt = [str(date - datetime.timedelta(days=1))]
-        else:
-            dt = str(date)
+        # if (t1 - t0) > (t2 - t0):
+        #     dt = [str(date - datetime.timedelta(days=1))]
+        # else:
+        #     dt = str(date)
+
+        dt = [str(date)]
 
         self.p = tpg(tel, dt, loud=True)
 
