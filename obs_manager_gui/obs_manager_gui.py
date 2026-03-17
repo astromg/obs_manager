@@ -159,9 +159,12 @@ class OM_Gui(QWidget):
                                 if key == "ok_ob":
                                     if "validator" in data.keys():
                                         if len(data["edited"])>0:
-                                            txt = "\u270E"
+                                            txt = "\u2699"
                                             item = QTableWidgetItem(txt)
-                                            item.setForeground(QColor("gold"))
+                                            item.setForeground(QColor("blue"))
+                                            font = QFont()
+                                            font.setPointSize(20)
+                                            item.setFont(font)
                                         elif data["validator"]["valid"]:
                                             txt = "\u2705"
                                             item = QTableWidgetItem(txt)
