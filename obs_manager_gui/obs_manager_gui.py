@@ -11,6 +11,8 @@ import requests
 
 import warnings
 import numpy
+import matplotlib
+import matplotlib.ticker as mticker
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
@@ -19,9 +21,11 @@ import ephem
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QTextEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog, QListWidget, QListWidgetItem, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QAbstractItemView, QTableWidgetItem, QVBoxLayout, QWidget, QDialog, QGridLayout, QPushButton, QComboBox, QLabel, QLineEdit, QTextEdit, QCheckBox, QDateEdit, QTimeEdit, QDateTimeEdit, QFileDialog, QListWidget, QListWidgetItem, QVBoxLayout, QHBoxLayout
 from PyQt6.QtCore import Qt, QTime, QDate, QDateTime
 from PyQt6.QtGui import QFont, QColor
+
+
 
 
 from astropy import units
@@ -36,8 +40,6 @@ from pyaraucaria.ob_validator import ObsValidator
 
 from tpg.telescope_plan_generator import TelescopePlanGenerator as tpg
 from .obs_manager_lib import *
-
-
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
@@ -64,11 +66,10 @@ class OM_Gui(QWidget):
         self.columns = ["ok_ob","tpg_vis"] + self.cfg["columns"]
 
         self.tpg_window = None
-        self.i = 1
+        self.i = -1
         self.mkUI()
         self.tel = self.tel_s.currentText()
         self.update_almanac()
-
 
     def update_table(self):
 
@@ -90,30 +91,6 @@ class OM_Gui(QWidget):
             self.table.cellClicked.disconnect(self.pocisniecie_tabelki)
         except TypeError:
             pass
-
-        tpg = False
-
-        # if self.tpg_window:
-        #     try:
-        #         tpg_ob = self.tpg_window.p.ob
-        #         tpg_ind_list = [t["index"] for t in tpg_ob]
-        #
-        #         date = self.date_e.date().toPyDate()
-        #         ut = self.time_e.time().toPyTime()
-        #         dt = datetime.datetime.combine(date, ut)
-        #
-        #         current_time = ephem.Date(dt)
-        #         tpg_time = self.tpg_window.p.nightTime
-        #         time_diff = numpy.abs([t - current_time for t in tpg_time])
-        #
-        #         m = numpy.argmin(time_diff)
-        #
-        #         #print(ephem.Date(current_time),ephem.Date(tpg_time[m]),time_diff[m])
-        #
-        #
-        #         tpg = True
-        #     except AttributeError:
-        #         tpg = False
 
         font = QFont()
         font.setPointSize(10)  # Ustawienie mniejszej czcionki
@@ -147,6 +124,7 @@ class OM_Gui(QWidget):
                         show_txt = False
                     if not (txt5.lower() in data["ob"].get("tag", "").lower()):
                         show_txt = False
+                    data["ob"] = self.clean_empty(data["ob"])
 
                 if show_txt:
 
@@ -156,11 +134,16 @@ class OM_Gui(QWidget):
                         self.table.insertRow(i)  # Dodanie nowego wiersza
 
                     if data["ob"]:
+                        item = QTableWidgetItem("")
+                        item.setBackground(QColor("white"))
+                        item.setForeground(QColor("black"))
 
                         for j,key in enumerate(self.columns):
 
                             if key in data["ob"].keys():
                                 item = QTableWidgetItem(str(data["ob"][key]))
+                                item.setBackground(QColor("white"))
+
                                 red_bkg = False
                                 if "validator" in data.keys():
                                     if key in data["validator"]["result"]:
@@ -174,18 +157,22 @@ class OM_Gui(QWidget):
 
                             else:
                                 if key == "ok_ob":
-                                    txt = ""
                                     if "validator" in data.keys():
                                         if len(data["edited"])>0:
-                                            txt += "\u270E"
+                                            txt = "\u270E"
+                                            item = QTableWidgetItem(txt)
+                                            item.setForeground(QColor("gold"))
                                         elif data["validator"]["valid"]:
-                                            txt += "✅"
+                                            txt = "\u2705"
+                                            item = QTableWidgetItem(txt)
+                                            item.setForeground(QColor("green"))
                                         else:
-                                            txt += "❌"
+                                            txt = "\u274C"
+                                            item = QTableWidgetItem(txt)
+                                            item.setForeground(QColor("red"))
 
-                                    item = QTableWidgetItem(txt)
                                     item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                                    item.setBackground(QColor("lightGray"))
+                                    item.setBackground(QColor(200, 200, 200))
                                 elif key == "tpg_vis":
 
                                     vis = data["tpg"].get("visibility",None)
@@ -199,17 +186,21 @@ class OM_Gui(QWidget):
                                         item = QTableWidgetItem(txt)
                                         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                                         item.setBackground(QColor("lightGreen"))
+                                    else:
+                                        item = QTableWidgetItem("")
+                                        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                        item.setBackground(QColor(200, 200, 200))
                                 else:
                                     item = QTableWidgetItem("")
-
+                                    item.setBackground(QColor("white"))
+                                    item.setForeground(QColor("black"))
 
                             if key in data["edited"]:
                                 item.setBackground(QColor(170, 220, 240))
 
                             if data["ob"].get("status",None):
                                 if data["ob"]["status"] in self.inactive_statuses:
-                                    item.setBackground(QColor(150, 150, 150))
-
+                                    item.setBackground(QColor(180, 180, 180))
 
                             self.table.setItem(i, j, item)
 
@@ -221,6 +212,7 @@ class OM_Gui(QWidget):
                         else:
                             item.setForeground(QColor("gray"))
 
+                        item.setBackground(QColor("white"))
                         self.table.setItem(i, 0, item)
                         self.table.setSpan(i, 0, 1, self.table.columnCount())
 
@@ -244,55 +236,56 @@ class OM_Gui(QWidget):
 
         with open(self.master_file, 'r') as plik:
             for line in plik:
-
-                tmp = {"ob": None, "line": None, "show": None, "parser_error": None, "index": -2, "edited": [], "tpg":{}}
-
-                tmp["line"] = line
-
-                if len(line.strip()) > 0:
-                    if len(line.split()) > 0:
-                        if "#" not in line.split()[0]:
-                            txt = f'OBJECT {line}'
-                            ob_tmp = ObsPlanParser.convert_from_string(txt)
-
-                            if ob_tmp is None:
-                                tmp["show"] = True
-                                tmp["parser_error"] = True
-                                print("*** parser error ***")
-                            else:
-                                ob = ObsValidator.convert_to_obdict(ob_tmp)
-                                if ob:
-                                    tmp["ob"] = ob
-                                    tmp["show"] = True
-                                else:
-                                    tmp["show"] = False
-
+                tmp = self.parse_line(line)
                 self.master_data.append(tmp)
 
+    def parse_line(self, line):
+        tmp = {"ob": None, "line": None, "show": None, "parser_error": None, "index": -2, "edited": [], "tpg": {}}
+
+        tmp["line"] = line
+
+        if len(line.strip()) > 0:
+            if len(line.split()) > 0:
+                if "#" not in line.split()[0]:
+                    txt = f'OBJECT {line}'
+                    ob_tmp = ObsPlanParser.convert_from_string(txt)
+
+                    if ob_tmp is None:
+                        tmp["show"] = True
+                        tmp["parser_error"] = True
+                        print("*** parser error ***")
+                    else:
+                        ob = ObsValidator.convert_to_obdict(ob_tmp)
+                        if ob:
+                            tmp["ob"] = ob
+                            tmp["show"] = True
+                        else:
+                            tmp["show"] = False
+        return tmp
 
     def plot_sky_map(self):
-        try:
-            self.sky_window = SkyWindow(self)
-            self.sky_window.show()
-            self.sky_window.raise_()
-        except:
-            pass
+        #try:
+        self.sky_window = SkyWindow(self)
+        self.sky_window.show()
+        self.sky_window.raise_()
+        #except:
+        #    pass
 
 
     def plot_data(self):
         i = int(self.table.currentRow())
         i_tab = [int(data["index"]) for data in self.master_data]
 
-        try:
-            n = i_tab.index(i)
-            target = self.master_data[n]["ob"]["name"]
+        #try:
+        n = i_tab.index(i)
+        target = self.master_data[n]["ob"]["name"]
 
-            self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.master_data[n])
-            self.phase_window.show()
-            self.phase_window.raise_()
+        self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.master_data[n])
+        self.phase_window.show()
+        self.phase_window.raise_()
 
-        except ValueError:
-            pass
+        #except ValueError:
+        #    pass
 
     def time_changed(self):
         try:
@@ -326,9 +319,6 @@ class OM_Gui(QWidget):
         obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
         time = Time(obs_time, scale='utc')
         self.almanac = sun_moon_ephem(time, self.cfg["obs_latitude"], self.cfg["obs_longitude"], self.cfg["obs_elevation"], horizon=0*units.deg)
-        # print(time.to_datetime() )
-        # print(self.almanac["next_sunrise"])
-        # print( self.almanac["next_sunrise"] - time.to_datetime() )
 
         txt = ""
         txt = txt + f'sunset: {self.almanac["next_sunset"]}\n'
@@ -337,19 +327,7 @@ class OM_Gui(QWidget):
         txt = txt + f'moonrise: {self.almanac["next_moonrise"]}\n'
         txt = txt + f'moonset: {self.almanac["next_moonset"]}\n'
 
-
-
         self.almanac_e.setText(txt)
-        # "julian_date": jd,
-        # "prev_sunrise": prev_sunrise,
-        # "next_sunrise": next_sunrise,
-        # "prev_sunset": prev_sunset,
-        # "next_sunset": next_sunset,
-        # "prev_moonrise": prev_moonrise,
-        # "next_moonrise": next_moonrise,
-        # "prev_moonset": prev_moonset,
-        # "next_moonset": next_moonset,
-        # "moon_phase": moon_ph
 
     def update_selection(self):
         self.table.selectRow(self.i)
@@ -380,14 +358,38 @@ class OM_Gui(QWidget):
                 if self.master_data[i].get("ob",None):
                     self.master_data[i]["ob"][key] = txt
                     self.master_data[i].setdefault("edited", []).append(key)
-                    self.update_table()
+
             self.all_c.setChecked(False)
         else:
             i = indx.index(i_selected)
             if self.master_data[i].get("ob",None):
                 self.master_data[i]["ob"][key] = txt
                 self.master_data[i].setdefault("edited", []).append(key)
+            else:
+                self.master_data[i] = self.parse_line(txt)
+
         self.update_table()
+
+    def fill_uobi(self):
+        indx = [x["index"] for x in self.master_data]
+        if self.all_c.isChecked():
+            for n in range(self.table.rowCount()):
+                i = indx.index(n)
+                if self.master_data[i].get("ob",None):
+                    if self.master_data[i]["ob"].get("uobi",None):
+                        pass
+                    else:
+                        self.master_data[i]["ob"]["uobi"] = str(uuid.uuid4())[:8]
+                        self.master_data[i].setdefault("edited", []).append("uobi")
+            self.all_c.setChecked(False)
+        else:
+            i = indx.index(self.i)
+            if self.master_data[i].get("ob",None):
+                self.master_data[i]["ob"]["uobi"] = str(uuid.uuid4())[:8]
+                self.master_data[i].setdefault("edited", []).append("uobi")
+
+        self.update_table()
+        self.all_c.setChecked(False)
 
     def copy_ob(self):
         indx = [x["index"] for x in self.master_data]
@@ -399,8 +401,30 @@ class OM_Gui(QWidget):
                 self.master_data[i+1]["ob"]["uobi"] = str(uuid.uuid4())[:8]
         self.update_table()
 
-    def deactivate(self):
-        pass
+    def delete_line(self):
+        indx = [x["index"] for x in self.master_data]
+        if self.i > -1:
+            i = indx.index(self.i)
+            del self.master_data[i]
+        self.update_table()
+
+    def validate_ob(self):
+        BASE_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+        COMMAND_RULES = ObsValidator.load_schema("command_rules.yaml")
+
+        for i,data in enumerate(self.master_data):
+            data["edited"] = []
+            if data["ob"]:
+                ob = data["ob"]
+                validator = ObsValidator(BASE_SCHEMA, COMMAND_RULES)
+                result = validator.validate_ob(ob)
+
+                if "validator" not in data:
+                    data["validator"] = {}
+
+                data["validator"]["valid"] = result["valid"]
+                data["validator"]["result"] = result["result"]
+        self.update_table()
 
     def save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
@@ -446,26 +470,6 @@ class OM_Gui(QWidget):
             except Exception as e:
                 print(f"Error saving file: {e}")
 
-
-    def validate_ob(self):
-        BASE_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
-        COMMAND_RULES = ObsValidator.load_schema("command_rules.yaml")
-
-        for i,data in enumerate(self.master_data):
-            data["edited"] = []
-            if data["ob"]:
-                ob = data["ob"]
-                validator = ObsValidator(BASE_SCHEMA, COMMAND_RULES)
-                result = validator.validate_ob(ob)
-
-                if "validator" not in data:
-                    data["validator"] = {}
-
-                data["validator"]["valid"] = result["valid"]
-                data["validator"]["result"] = result["result"]
-        self.update_table()
-
-
     def tpg_show(self):
         self.update_almanac()
         self.tpg_window = TPGWindow(self)
@@ -487,6 +491,9 @@ class OM_Gui(QWidget):
             new_columns = dialog.get_columns()
             self.columns = new_columns
             self.update_table()
+
+    def clean_empty(self, obs: dict) -> dict:
+        return {k: v for k, v in obs.items() if v not in (None, "")}
 
     def mkUI(self):
         self.setWindowTitle('OCM observing plan manager')
@@ -551,6 +558,10 @@ class OM_Gui(QWidget):
         grid.addWidget(self.filter_other_l, w, 0)
         grid.addWidget(self.filter_other_e, w, 1)
 
+        self.fill_uobi_p = QPushButton("Fill UOBI")
+        self.fill_uobi_p.clicked.connect(self.fill_uobi)
+        grid.addWidget(self.fill_uobi_p, w, 2)
+
         self.all_c = QCheckBox("Edit Column")
         self.all_c.setChecked(False)
         grid.addWidget(self.all_c, w, 3)
@@ -562,8 +573,9 @@ class OM_Gui(QWidget):
 
         w = w + 1
         self.table = QTableWidget()
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        #self.table.setSelectionMode(QTableWidget.SelectionBehavior.SingleSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # zaznaczenie całego wiersza
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        #self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setStyleSheet("selection-background-color: rgb(217,239,217); selection-color: black; ")
 
         grid.addWidget(self.table, w, 0, 1, 7)
@@ -573,9 +585,9 @@ class OM_Gui(QWidget):
         self.sky_p.clicked.connect(self.plot_sky_map)
         grid.addWidget(self.sky_p, w, 3)
 
-        self.deactivate_p = QPushButton("Deactivate")
-        self.deactivate_p.clicked.connect(self.deactivate)
-        grid.addWidget(self.deactivate_p, w, 0)
+        self.deleteOB_p = QPushButton("Delete OB")
+        self.deleteOB_p.clicked.connect(self.delete_line)
+        grid.addWidget(self.deleteOB_p, w, 0)
 
         self.validate_p = QPushButton("Validate OB")
         self.validate_p.clicked.connect(self.validate_ob)
@@ -668,276 +680,290 @@ class PhaseWindow(QWidget):
         return Time(tmp, format="iso").jd
 
     def refresh(self):
+        self._prepare_time()
+        self._update_ephemeris()
 
-        self.obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
-        time = Time(self.obs_time, scale='utc')
-        self.current_jd = time.jd
-        jd3h = self.current_jd + numpy.arange(1,7,1)/24.
+        self._plot_lightcurve()
+        self._plot_visibility()
+        self._plot_tpg()
 
-        time_range = Time(numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 100), format="jd")
+        self.canvas.draw()
+        self.fig.subplots_adjust(hspace=0.3)
+        self.show()
 
+    # ========================
+    # TIME + EPHEMERIS
+    # ========================
 
-        txt = f'moon phase: {self.parent.almanac["moon_phase"]:.0f} %'
-        self.ephem_e.setText(txt)
+    def _prepare_time(self):
+        self.obs_time = datetime.datetime.combine(
+            self.parent.date_e.date().toPyDate(),
+            self.parent.time_e.time().toPyTime()
+        )
+        t = Time(self.obs_time, scale='utc')
 
+        self.current_jd = t.jd
+        self.jd3h = self.current_jd + numpy.arange(1, 7) / 24.
+
+    def _update_ephemeris(self):
+        moon_phase = float(self.parent.almanac["moon_phase"])
+
+        self.ephem_e.setText(f"moon phase: {moon_phase:.0f} %")
         self.ephem_e.setStyleSheet("background-color: white;")
-        if self.ob.get("max_moon_phase", False):
-            if float(self.ob["max_moon_phase"]) < float(self.parent.almanac["moon_phase"]):
-                self.ephem_e.setStyleSheet("background-color: lightcoral;")
 
-        if self.ob.get("h_min", False):
-            hmin = float(self.ob["h_min"])
-        else:
-            hmin = self.parent.cfg["tel"][self.parent.tel]["hmin"]
+        if self.ob.get("max_moon_phase") and float(self.ob["max_moon_phase"]) < moon_phase:
+            self.ephem_e.setStyleSheet("background-color: lightcoral;")
 
-        if self.ob.get("h_max", False):
-            hmax = float(self.ob["h_max"])
-        else:
-            hmax = self.parent.cfg["tel"][self.parent.tel]["hmax"]
+    # ========================
+    # LIGHT CURVE
+    # ========================
 
+    def _plot_lightcurve(self):
+        self.axes.clear()
+
+        try:
+            jd, mag, flag = self._load_lightcurve()
+            if len(jd) == 0:
+                return
+
+            jd = numpy.array(jd)
+            mag = numpy.array(mag)
+            flag = numpy.array(flag)
+
+            self.now_t = self.current_jd
+
+            if self.phase_c.isChecked():
+                jd = self._convert_to_phase(jd)
+            else:
+                self.axes.set_title(f"{self.target}")
+
+            self._plot_recent_and_all(jd, mag, flag)
+            self._format_lightcurve_axes(mag)
+
+            self.axes.axvline(self.now_t, color="blue")
+            self._plot_time_markers()
+
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Lightcurve error: {e}")
+
+    def _load_lightcurve(self):
+        filter_name = self.file_s.currentText()
+
+        file = self.ob.get(
+            "obs_data",
+            f"{self.f_path}/{filter_name}/light-curve/{self.target.lower()}_{filter_name}_diff_light_curve.txt"
+        )
+
+        tab = Table.read(file, format="ascii")
+        return tab["jd_obs"], tab["mag"], tab["quality"]
+
+    def _convert_to_phase(self, jd):
+        if "P" not in self.ob:
+            self.phase_c.setChecked(False)
+            return jd
+
+        P = float(self.ob["P"])
+        jd0 = float(self.ob.get("hjd0", 2460000))
+
+        self.now_t = (self.current_jd - jd0) / P % 1
+        self.jd3h = (self.jd3h - jd0) / P % 1
+
+        jd = (jd - jd0) / P % 1
+
+        self.axes.set_xlim(-0.1, 1.1)
+        self.axes.set_title(f"{self.target} P={P}")
+
+        return jd
+
+    def _plot_recent_and_all(self, jd, mag, flag):
+        recent_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
+
+        for q, color in [(0, "g"), (1, "c"), (2, "k")]:
+            self.axes.plot(jd[flag == q], mag[flag == q], f".{color}", alpha=0.1)
+            self.axes.plot(jd[recent_mask & (flag == q)],
+                           mag[recent_mask & (flag == q)],
+                           f".{color}", alpha=1)
+
+    def _format_lightcurve_axes(self, mag):
+        d = 0.1 * (max(mag) - min(mag))
+        self.axes.set_ylim(max(mag) + d, min(mag) - d)
+
+    def _plot_time_markers(self):
+        alpha = 1.0
+        for i, x in enumerate(self.jd3h):
+            alpha /= (i + 2)
+            self.axes.axvline(x, color="blue", alpha=alpha)
+
+    # ========================
+    # VISIBILITY
+    # ========================
+
+    def _plot_visibility(self):
         self.axes2.clear()
-        self.axes2.set_ylim(-20, 90)
-        self.axes2.set_xlim(int(self.current_jd), int(self.current_jd)+1)
-        self.axes2.axvline(x=self.current_jd, color="blue")
-        self.axes2.axhspan(-20, 0, xmin=0, xmax=1, facecolor='red', alpha=0.1)
-        self.axes2.axhspan(0, hmin, xmin=0, xmax=1, facecolor='black', alpha=0.05)
-        self.axes2.axhspan(hmax, 90, xmin=0, xmax=1, facecolor='black', alpha=0.05)
+
+        hmin = float(self.ob.get("h_min", self.parent.cfg["tel"][self.parent.tel]["hmin"]))
+        hmax = float(self.ob.get("h_max", self.parent.cfg["tel"][self.parent.tel]["hmax"]))
+
+        t = numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 100)
+        time_range = Time(t, format="jd")
+
+        alt, sun_alt, moon_alt, sep = self._compute_altaz(time_range)
+
+        self._format_visibility_axes(hmin, hmax)
+        self._plot_visibility_lines(time_range.jd, alt, sun_alt, moon_alt)
+
+        self._update_moon_sep(sep)
+        self._plot_time_constraints(time_range)
+        self._set_time_ticks(self.axes2, time_range)
+
+    def _compute_altaz(self, time_range):
+        loc = EarthLocation(
+            lat=self.parent.cfg["obs_latitude"],
+            lon=self.parent.cfg["obs_longitude"],
+            height=self.parent.cfg["obs_elevation"]
+        )
 
         i = int(self.parent.table.currentRow())
         i_tab = [int(data["index"]) for data in self.parent.master_data]
         n = i_tab.index(i)
-        ra = self.parent.master_data[n]["ob"]["ra"]
-        dec = self.parent.master_data[n]["ob"]["dec"]
 
-        obs_location = EarthLocation(lat=self.parent.cfg["obs_latitude"], lon=self.parent.cfg["obs_longitude"], height=self.parent.cfg["obs_elevation"])
-        object = SkyCoord(ra=ra, dec=dec, unit=('hourangle', 'deg'), frame='icrs')
-        time_range = Time(numpy.linspace(int(self.current_jd), int(self.current_jd)+1, 100), format="jd")
-        altaz_frame = AltAz(obstime=time_range, location=obs_location)
-        object_altaz = object.transform_to(altaz_frame)
-        alt = object_altaz.alt.deg
-        sun = get_sun(time_range)
-        sun_alt = sun.transform_to(altaz_frame).alt.degree
+        ob = self.parent.master_data[n]["ob"]
+
+        coord = SkyCoord(ra=ob["ra"], dec=ob["dec"], unit=('hourangle', 'deg'))
+        frame = AltAz(obstime=time_range, location=loc)
+
+        alt = coord.transform_to(frame).alt.deg
+        sun_alt = get_sun(time_range).transform_to(frame).alt.deg
         moon = get_moon(time_range)
-        moon_alt = moon.transform_to(altaz_frame).alt.degree
-        sep = object_altaz.separation(moon).deg
+        moon_alt = moon.transform_to(frame).alt.deg
+        sep = coord.transform_to(frame).separation(moon).deg
 
-        txt = f'separation: {min(sep):.0f}\u00B0'
-        self.moon_sep_e.setText(txt)
+        return alt, sun_alt, moon_alt, sep
 
+    def _format_visibility_axes(self, hmin, hmax):
+        self.axes2.set_ylim(-20, 90)
+        self.axes2.set_xlim(int(self.current_jd), int(self.current_jd) + 1)
+
+        self.axes2.axvline(self.current_jd, color="blue")
+        self.axes2.axhspan(-20, 0, facecolor='red', alpha=0.1)
+        self.axes2.axhspan(0, hmin, facecolor='black', alpha=0.05)
+        self.axes2.axhspan(hmax, 90, facecolor='black', alpha=0.05)
+
+    def _plot_visibility_lines(self, t, alt, sun_alt, moon_alt):
+        self.axes2.plot(t, alt, "-g")
+        self.axes2.plot(t, sun_alt, "--y")
+        self.axes2.plot(t, moon_alt, ":k")
+
+    def _update_moon_sep(self, sep):
+        self.moon_sep_e.setText(f"separation: {min(sep):.0f}\u00B0")
         self.moon_sep_e.setStyleSheet("background-color: white;")
-        if self.ob.get("min_moon_dist", False):
-            if float(self.ob["min_moon_dist"]) > float(min(sep)):
-                self.moon_sep_e.setStyleSheet("background-color: lightcoral;")
 
+        if self.ob.get("min_moon_dist") and float(self.ob["min_moon_dist"]) > float(min(sep)):
+            self.moon_sep_e.setStyleSheet("background-color: lightcoral;")
 
-        self.axes2.plot(time_range.jd,alt,"-g")
-        self.axes2.plot(time_range.jd, sun_alt, "--y")
-        self.axes2.plot(time_range.jd, moon_alt, ":k")
-        #self.axes2.add_patch(Rectangle((0, 0), 0.5, 10, facecolor='yellow', alpha=0.5))
-
-        t_start = self.parse_time(self.ob.get("t_start",None))
-        t_end = self.parse_time(self.ob.get("t_end",None))
+    def _plot_time_constraints(self, time_range):
+        t_start = self.parse_time(self.ob.get("t_start"))
+        t_end = self.parse_time(self.ob.get("t_end"))
 
         xmin = time_range.jd[0]
         xmax = time_range.jd[-1]
 
         if t_start:
             self.axes2.axvspan(xmin, t_start, color="gray", alpha=0.15)
-
         if t_end:
             self.axes2.axvspan(t_end, xmax, color="gray", alpha=0.15)
 
+    # ========================
+    # TPG
+    # ========================
 
-        # wykres z danymi (gorny)
-
-        self.axes.clear()
-        try:
-            filter = self.file_s.currentText()
-            file = self.f_path+"/"+filter+"/light-curve/"+self.target.lower()+"_"+filter+"_diff_light_curve.txt"
-
-            if self.ob.get("obs_data",None):
-                file = self.ob.get("obs_data",None)
-
-
-            mag = []
-            jd = []
-            flag = []
-
-            lc_tab = Table.read(file, format="ascii")
-            mag = lc_tab["mag"]
-            jd = lc_tab["jd_obs"]
-            flag = lc_tab["quality"]
-
-            if len(mag) == len(jd) and len(jd)>0:
-
-                jd = numpy.array(jd)
-                mag = numpy.array(mag)
-                recent_obs_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
-
-
-                # obsluga rysowania cycle part 1.
-                plot_cycle = False
-                if self.ob.get("cycle", False):
-                    mk = numpy.array(flag) != 2   # tylko dobre obserwacje
-                    last_jd = max(numpy.array(jd)[mk])
-                    end_cycle =  last_jd + float(self.ob["cycle"])
-                    plot_cycle = True
-
-                self.now_t = self.current_jd
-                if self.phase_c.isChecked():
-
-                    plot_cycle = False
-
-                    if "P" in self.ob.keys():
-                        self.P = self.ob["P"]
-                        if "hjd0" in self.ob.keys():
-                            self.jd0 = self.ob["hjd0"]
-                        else:
-                            self.jd0 = 2460000
-
-                        jd = (numpy.array(jd) - float(self.jd0))/float(self.P)%1
-
-                        self.now_t = (self.current_jd - float(self.jd0))/float(self.P)%1
-                        jd3h = (jd3h - float(self.jd0))/float(self.P)%1
-
-                        if "ph_start" in self.ob.keys() and "ph_end" in self.ob.keys():
-                            t0 = float(self.ob["ph_start"])
-                            t1 = float(self.ob["ph_end"])
-
-                            if t0 < t1:
-                                self.axes.axvspan(0, t0, color='red', alpha=0.05)
-                                self.axes.axvspan(t1, 1, color='red', alpha=0.05)
-                            else:
-                                self.axes.axvspan(t1, t0, color='red', alpha=0.05)
-
-                        if "ph_mk" in self.ob.keys():
-                            bin = float(self.ob["ph_mk"].split("/")[2])
-                            fitr = self.ob["ph_mk"].split("/")[1]
-                            n_obs = float(self.ob["ph_mk"].split("/")[0])
-
-                            covered = []
-                            maska_quality = numpy.array(flag) < 2
-                            for i,t in enumerate(jd[maska_quality]):
-                                mk1 = t > jd[maska_quality] - bin/2
-                                mk2 = t < jd[maska_quality] + bin/2
-                                mk = numpy.array([a and b for a,b in zip(mk1,mk2)])
-                                if len(mk[mk]) >= n_obs:
-                                    covered.append([t-bin/2.,t+bin/2.])
-
-                            covered.sort(key=lambda x: x[0])
-                            merged = []
-                            for odcinek in covered:
-                                if not merged or merged[-1][1] < odcinek[0]:
-                                    merged.append(odcinek)
-                                else:
-                                    merged[-1][1] = max(merged[-1][1], odcinek[1])
-
-                            for x in merged:
-                                self.axes.axvspan(x[0], x[1], color='red', alpha=0.05)
-
-                        self.axes.set_xlim(-0.1,1.1)
-                        self.axes.set_title(f"{self.target} P={self.P}")
-
-                    else:
-                        self.phase_c.setChecked(False)
-                        self.axes.set_title(f"{self.target}")
-                else:
-                    self.axes.set_title(f"{self.target}")
-
-
-                # last 7 days:
-                jd_tmp = jd[recent_obs_mask]
-                mag_tmp = mag[recent_obs_mask]
-                flag_tmp = numpy.array(flag)[recent_obs_mask]
-
-                mk = numpy.array(flag_tmp) == 0
-                x = numpy.array(jd_tmp)[mk]
-                y = numpy.array(mag_tmp)[mk]
-                self.axes.plot(x,y,".g",alpha=1)
-
-                mk = numpy.array(flag_tmp) == 1
-                x = numpy.array(jd_tmp)[mk]
-                y = numpy.array(mag_tmp)[mk]
-                self.axes.plot(x,y,".c",alpha=1)
-
-                mk = numpy.array(flag_tmp) == 2
-                x = numpy.array(jd_tmp)[mk]
-                y = numpy.array(mag_tmp)[mk]
-                self.axes.plot(x,y,".k",alpha=0.5)
-
-
-                # all dates
-                mk = numpy.array(flag) == 0
-                x = numpy.array(jd)[mk]
-                y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".g",alpha=0.1)
-
-                mk = numpy.array(flag) == 1
-                x = numpy.array(jd)[mk]
-                y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".c",alpha=0.1)
-
-                mk = numpy.array(flag) == 2
-                x = numpy.array(jd)[mk]
-                y = numpy.array(mag)[mk]
-                self.axes.plot(x,y,".k",alpha=0.05)
-
-                d = 0.1*(max(mag)-min(mag))
-                self.axes.set_ylim(max(mag)+d,min(mag)-d)
-
-
-                self.axes.axvline(x=self.now_t, color="blue")
-                i_tmp = 1.
-                for x in jd3h:
-                    i_tmp += 1
-                    self.axes.axvline(x, color="blue", alpha = 1/i_tmp)
-
-
-                # obsluga rysowania cycle part 2.
-                if self.ob.get("cycle", False):
-                    if plot_cycle:
-                        self.axes.fill_between([last_jd, end_cycle],min(mag), max(mag),color='red', alpha=0.1)
-
-                    if end_cycle > int(self.now_t):
-                        self.axes2.fill_between([int(self.now_t), end_cycle],-20, 90,color='red', alpha=0.1)
-
-
-        except (FileNotFoundError,ValueError) as e:
-            print(f"Phase Window Error: {e}")
-
-        # wykres tpg
+    def _plot_tpg(self):
         self.axes3.clear()
-        if self.data.get("tpg",None):
-            nt = self.data["tpg"].get("nightTime",None)
-            vis_list = self.data["tpg"].get("visibility",None)
-            if nt and vis_list:
-                nt = numpy.array(nt) + 2415020
-                for i, (label, values) in enumerate(vis_list.items()):
-                    green_segments = []
-                    red_segments = []
-                    for j in range(len(values) - 1):
-                        x = nt[j]
-                        width = nt[j + 1] - nt[j]
-                        if values[j]:
-                            green_segments.append((x, width))
-                        else:
-                            red_segments.append((x, width))
-                    if green_segments:
-                        self.axes3.broken_barh(green_segments,(i - 0.8 / 2, 0.8),facecolors='green',alpha=0.3)
-                    if red_segments:
-                        self.axes3.broken_barh(red_segments,(i - 0.8 / 2, 0.8),facecolors='red',alpha=0.3)
 
-                self.axes3.axvline(x=self.current_jd, color="blue")
-                self.axes3.set_yticks(range(len(vis_list)))
-                self.axes3.set_yticklabels(vis_list.keys())
+        tpg = self.data.get("tpg")
+        if not tpg:
+            return
 
-                self.axes3.set_xlim(self.axes.get_xlim())
+        nt = tpg.get("nightTime")
+        vis = tpg.get("visibility")
 
-        self.fig.tight_layout()
-        self.canvas.draw()
-        self.show()
+        if not nt or not vis:
+            return
 
+        nt = Time([ephem.Date(t).datetime() for t in nt], scale='utc').jd
 
+        for i, (label, values) in enumerate(vis.items()):
+            segments = self._split_segments(nt, values)
+
+            for color, seg in segments.items():
+                if seg:
+                    self.axes3.broken_barh(seg, (i - 0.4, 0.8),
+                                           facecolors=color, alpha=0.3)
+
+        self.axes3.axvline(self.current_jd, color="blue")
+        self.axes3.set_yticks(range(len(vis)))
+        self.axes3.set_yticklabels(vis.keys())
+        self.axes3.set_xlim(self.axes2.get_xlim())
+
+        self._set_time_ticks(self.axes3, Time(nt, format="jd"))
+
+    def _split_segments(self, nt, values):
+        green, red = [], []
+
+        for i in range(len(values) - 1):
+            seg = (nt[i], nt[i + 1] - nt[i])
+            (green if values[i] else red).append(seg)
+
+        return {"green": green, "red": red}
+
+    # Ticksy na wykresach
+
+    def _format_jd_tick(self, jd, pos=None):
+        dt = Time(jd, format="jd").to_datetime()
+        return dt.strftime("%H:%M")
+
+    # Funkcja ustawiająca inteligentne ticki
+    def _set_time_ticks(self, ax, time_range):
+        jd_start = time_range.jd[0]
+        jd_end = time_range.jd[-1]
+
+        # 1. Najważniejsze ticki
+        ticks_priority = []
+
+        # current time
+        ticks_priority.append((self.current_jd, 0))  # 0 = najwyższy priorytet
+
+        # wschód/zachód słońca
+        if self.parent.almanac.get("next_sunset"):
+            ticks_priority.append((Time(self.parent.almanac["next_sunset"]).jd, 1))
+        if self.parent.almanac.get("next_sunrise"):
+            ticks_priority.append((Time(self.parent.almanac["next_sunrise"]).jd, 1))
+
+        # wschód/zachód księżyca
+        if self.parent.almanac.get("next_moonrise"):
+            ticks_priority.append((Time(self.parent.almanac["next_moonrise"]).jd, 2))
+        if self.parent.almanac.get("next_moonset"):
+            ticks_priority.append((Time(self.parent.almanac["next_moonset"]).jd, 2))
+
+        # co 2 godziny
+        ticks_2h = list(numpy.arange(jd_start, jd_end, 2 / 24.))
+        for t in ticks_2h:
+            ticks_priority.append((t, 3))
+
+        # sortowanie po priorytecie
+        ticks_priority.sort(key=lambda x: x[1])
+
+        # filtr odległości minimalnej między tickami (np. 30 min = 0.0208 JD)
+        min_distance = 60 / 60 / 24  # 30 minut w JD
+        final_ticks = []
+
+        for jd_val, prio in ticks_priority:
+            if all(abs(jd_val - t) > min_distance for t in final_ticks):
+                final_ticks.append(jd_val)
+
+        final_ticks.sort()  # dla estetyki od lewej do prawej
+        ax.set_xticks(final_ticks)
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(self._format_jd_tick))
 
     def mkUI(self):
         grid = QGridLayout()
@@ -957,9 +983,13 @@ class PhaseWindow(QWidget):
 
         self.fig = Figure((2.0, 2.0), linewidth=-1, dpi=100)
         self.canvas = FigureCanvas(self.fig)
-        self.axes = self.fig.add_subplot(311)
-        self.axes2 = self.fig.add_subplot(312)
-        self.axes3 = self.fig.add_subplot(313)
+
+        gs = self.fig.add_gridspec(3, 1, height_ratios=[2, 2, 1])
+
+        self.axes = self.fig.add_subplot(gs[0])
+        self.axes2 = self.fig.add_subplot(gs[1])
+        self.axes3 = self.fig.add_subplot(gs[2])
+
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.ephem_e, 0, 1)
         grid.addWidget(self.moon_sep_e, 0, 2)
@@ -1188,17 +1218,17 @@ class TPGWindow(QWidget):
 
         t0 = datetime.datetime.combine(date, ut)
 
-        # DUPA
-        # tu nie liczy sie dobrze
-        t1 = self.parent.almanac["next_sunset"]
-        t2 = self.parent.almanac["prev_sunset"]
+        t_next = self.parent.almanac["next_sunset"]
+        t_prev = self.parent.almanac["prev_sunset"]
 
-        # if (t1 - t0) > (t2 - t0):
-        #     dt = [str(date - datetime.timedelta(days=1))]
-        # else:
-        #     dt = str(date)
+        if t_prev <= t0 < t_next:
+            # dzień → bierzemy najbliższy zachód (dzisiejszy)
+            night_start = t_next
+        else:
+            # noc → bierzemy poprzedni zachód
+            night_start = t_prev
 
-        dt = [str(date)]
+        dt = [night_start.strftime("%Y/%m/%d")]
 
         self.p = tpg(tel, dt, loud=True)
 
