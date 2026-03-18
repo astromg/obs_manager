@@ -735,8 +735,13 @@ class PhaseWindow(QWidget):
 
             self.now_t = self.current_jd
 
+            plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(jd, flag)
+
             if self.phase_c.isChecked():
                 jd = self._convert_to_phase(jd)
+                plot_cycle = False
+
+                self._plot_phase_constraints(jd, flag)
             else:
                 self.axes.set_title(f"{self.target}")
 
@@ -746,8 +751,91 @@ class PhaseWindow(QWidget):
             self.axes.axvline(self.now_t, color="blue")
             self._plot_time_markers()
 
+            self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, mag)
+
         except (FileNotFoundError, ValueError) as e:
             print(f"Lightcurve error: {e}")
+
+    def _plot_cycle_overlay(self, plot_cycle, last_jd, end_cycle, mag):
+        if not plot_cycle or last_jd is None or end_cycle is None:
+            return
+
+        # lightcurve
+        self.axes.fill_between(
+            [last_jd, end_cycle],
+            min(mag),
+            max(mag),
+            color='red',
+            alpha=0.1
+        )
+
+        # visibility (axes2)
+        if end_cycle > int(self.now_t):
+            self.axes2.fill_between(
+                [int(self.now_t), end_cycle],
+                -20,
+                90,
+                color='red',
+                alpha=0.1
+            )
+
+    def _handle_cycle_logic(self, jd, flag):
+        plot_cycle = False
+        last_jd = None
+        end_cycle = None
+
+        if self.ob.get("cycle"):
+            mk = numpy.array(flag) != 2  # dobre obserwacje
+            if numpy.any(mk):
+                last_jd = max(numpy.array(jd)[mk])
+                end_cycle = last_jd + float(self.ob["cycle"])
+                plot_cycle = True
+
+        return plot_cycle, last_jd, end_cycle
+
+    def _plot_phase_constraints(self, jd, flag):
+        # --- zakresy zabronione ---
+        if "ph_start" in self.ob and "ph_end" in self.ob:
+            t0 = float(self.ob["ph_start"])
+            t1 = float(self.ob["ph_end"])
+
+            if t0 < t1:
+                self.axes.axvspan(0, t0, color='red', alpha=0.05)
+                self.axes.axvspan(t1, 1, color='red', alpha=0.05)
+            else:
+                self.axes.axvspan(t1, t0, color='red', alpha=0.05)
+
+        # --- pokrycie fazy ---
+        if "ph_mk" in self.ob:
+            n_obs, filt, bin_size = self.ob["ph_mk"].split("/")
+            n_obs = float(n_obs)
+            bin_size = float(bin_size)
+
+            covered = []
+            mask_quality = numpy.array(flag) < 2
+
+            jd_good = jd[mask_quality]
+
+            for t in jd_good:
+                mk1 = t > jd_good - bin_size / 2
+                mk2 = t < jd_good + bin_size / 2
+                mk = mk1 & mk2
+
+                if numpy.sum(mk) >= n_obs:
+                    covered.append([t - bin_size / 2, t + bin_size / 2])
+
+            # merge
+            covered.sort(key=lambda x: x[0])
+            merged = []
+
+            for seg in covered:
+                if not merged or merged[-1][1] < seg[0]:
+                    merged.append(seg)
+                else:
+                    merged[-1][1] = max(merged[-1][1], seg[1])
+
+            for x0, x1 in merged:
+                self.axes.axvspan(x0, x1, color='red', alpha=0.05)
 
     def _load_lightcurve(self):
         filter_name = self.file_s.currentText()
