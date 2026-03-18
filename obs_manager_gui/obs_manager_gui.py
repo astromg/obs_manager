@@ -735,8 +735,6 @@ class PhaseWindow(QWidget):
 
             self.now_t = self.current_jd
 
-            plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(jd, flag)
-
             if self.phase_c.isChecked():
                 jd = self._convert_to_phase(jd)
                 plot_cycle = False
@@ -749,9 +747,12 @@ class PhaseWindow(QWidget):
             self._format_lightcurve_axes(mag)
 
             self.axes.axvline(self.now_t, color="blue")
+
+            plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(jd, flag)
+            self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, mag)
+
             self._plot_time_markers()
 
-            self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, mag)
 
         except (FileNotFoundError, ValueError) as e:
             print(f"Lightcurve error: {e}")
