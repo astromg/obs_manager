@@ -1268,6 +1268,7 @@ class TPGWindow(QWidget):
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Moon masked")
 
     def mask_wind(self):
         self.p.MaskWind()
@@ -1277,6 +1278,7 @@ class TPGWindow(QWidget):
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Wind masked")
 
     def mask_cycle(self):
         self.p.MaskCycle()
@@ -1286,6 +1288,7 @@ class TPGWindow(QWidget):
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Cycle masked")
 
     def mask_startend(self):
         self.p.MaskStartEnd()
@@ -1295,24 +1298,31 @@ class TPGWindow(QWidget):
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Time masked")
 
     def mask_phstartend(self):
         self.p.MaskPhaseStartEnd()
         for n,ob in enumerate(self.p.ob):
             if "visibility" in ob.keys():
                 self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
+                print(self.parent.master_data[ob["index"]]["tpg"]["visibility"].keys())
+
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Phase masked")
 
     def mask_phase(self):
         self.p.MaskPhase()
         for n,ob in enumerate(self.p.ob):
             if "visibility" in ob.keys():
                 self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
+                print(self.parent.master_data[ob["index"]]["tpg"]["visibility"].keys())
+
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+        self.log_e.setText("Phase density masked")
 
     def run_tpg(self):
         self.load()
