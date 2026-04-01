@@ -63,7 +63,7 @@ class OM_Gui(QWidget):
         #print(self.cfg)
 
         self.schema_columns = ObsValidator.load_schema("tpg_schema")["properties"].keys()
-        self.columns = ["ok_ob","tpg_vis"] + self.cfg["columns"]
+        self.columns = ["ok_ob","ctc","last_obs","tpg_vis"] + self.cfg["columns"]
 
         self.tpg_window = None
         self.i = -1
@@ -193,6 +193,26 @@ class OM_Gui(QWidget):
                                         item = QTableWidgetItem("")
                                         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                                         item.setBackground(QColor(200, 200, 200))
+                                elif key == "ctc":
+
+                                    #ctc = data["tpg"].get("ob_time",None)
+
+                                    item = QTableWidgetItem("")
+                                    item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                    item.setBackground(QColor(200, 200, 200))
+
+                                elif key == "last_obs":
+
+                                    last_jd = data["ob"].get("last_jd",None)
+                                    if last_jd:
+                                        dt = self.almanac["julian_date"] - last_jd
+                                        item = QTableWidgetItem(f'{dt:.1f}')
+                                    else:
+                                        item = QTableWidgetItem("")
+
+                                    item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                    item.setBackground(QColor(200, 200, 200))
+
                                 else:
                                     item = QTableWidgetItem("")
                                     item.setBackground(QColor("white"))
@@ -291,6 +311,7 @@ class OM_Gui(QWidget):
         #    pass
 
     def time_changed(self):
+        self.update_almanac()
         try:
             if self.sky_window.isVisible():
                 self.sky_window.updateMap()
@@ -305,6 +326,7 @@ class OM_Gui(QWidget):
             pass
 
     def date_changed(self):
+        self.update_almanac()
         try:
             if self.sky_window.isVisible():
                 self.sky_window.updateMap()
@@ -322,8 +344,10 @@ class OM_Gui(QWidget):
         obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
         time = Time(obs_time, scale='utc')
         self.almanac = sun_moon_ephem(time, self.cfg["obs_latitude"], self.cfg["obs_longitude"], self.cfg["obs_elevation"], horizon=0*units.deg)
+        self.almanac["julian_date"] = time.jd
 
         txt = ""
+        txt += f'julian date: {time.jd}\n'
         txt = txt + f'sunset: {self.almanac["next_sunset"]}\n'
         txt = txt + f'sunrise: {self.almanac["next_sunrise"]}\n'
         txt = txt + f'moon: {self.almanac["moon_phase"]}\n'
@@ -394,6 +418,33 @@ class OM_Gui(QWidget):
         self.update_table()
         self.all_c.setChecked(False)
 
+    def last_obs(self):
+        indx = [x["index"] for x in self.master_data]
+
+        for n in range(self.table.rowCount()):
+            i = indx.index(n)
+            ob = self.master_data[i].get("ob",None)
+            if ob:
+                try:
+                    if ob.get("obs_data",None):
+                        fname = self.master_data[i]["ob"]["obs_data"]
+                        file = self.cfg["tel"][self.tel]["data_file"]+"/"+fname
+                    else:
+                        filtr = ob["seq"].split("/")[1]
+                        file = (self.cfg["tel"][self.tel]["data_file"] + ob["name"].lower() + "/" + filtr + "/light-curve/" + ob["name"].lower() + "_" + filtr + "_diff_light_curve.txt")
+                    print(file)
+                    lc_tab = Table.read(file, format="ascii")
+                    jd = numpy.array(lc_tab["jd_obs"])
+                    if len(jd) == 0:
+                        continue
+                    last_jd = max(jd)
+                    ob["last_jd"] = last_jd
+                except (FileNotFoundError, ValueError, KeyError):
+                    pass
+        self.update_table()
+
+
+
     def copy_ob(self):
         indx = [x["index"] for x in self.master_data]
         i = indx.index(self.i)
@@ -413,13 +464,17 @@ class OM_Gui(QWidget):
 
     def validate_ob(self):
         BASE_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+        TPG_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+
+        SCHEMA = merge_schemas(BASE_SCHEMA, TPG_SCHEMA)
+
         COMMAND_RULES = ObsValidator.load_schema("command_rules.yaml")
 
         for i,data in enumerate(self.master_data):
             data["edited"] = []
             if data["ob"]:
                 ob = data["ob"]
-                validator = ObsValidator(BASE_SCHEMA, COMMAND_RULES)
+                validator = ObsValidator(SCHEMA, COMMAND_RULES)
                 result = validator.validate_ob(ob)
 
                 if "validator" not in data:
@@ -613,17 +668,24 @@ class OM_Gui(QWidget):
         w = w + 1
         self.load_p = QPushButton("Load file")
         self.load_p.clicked.connect(self.load_file)
+        grid.addWidget(self.load_p, w, 0)
+
+        self.last_p = QPushButton("Last obs")
+        self.last_p.clicked.connect(self.last_obs)
+        grid.addWidget(self.last_p, w, 1)
+
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
-        self.config_p = QPushButton("\u2699")
-        self.config_p.clicked.connect(self.open_config)
-        self.close_p = QPushButton("Close")
-        self.close_p.clicked.connect(self.close)
-        grid.addWidget(self.load_p, w, 0)
-        grid.addWidget(self.config_p, w, 2)
         grid.addWidget(self.save_p, w, 3)
 
+
+        self.config_p = QPushButton("\u2699")
+        self.config_p.clicked.connect(self.open_config)
+        grid.addWidget(self.config_p, w, 2)
+
         w = w + 1
+        self.close_p = QPushButton("Close")
+        self.close_p.clicked.connect(self.close)
         grid.addWidget(self.close_p, w, 4, 1, 3)
 
         self.setLayout(grid)
@@ -841,12 +903,9 @@ class PhaseWindow(QWidget):
     def _load_lightcurve(self):
         filter_name = self.file_s.currentText()
 
-        file = self.ob.get(
-            "obs_data",
-            f"{self.f_path}/{filter_name}/light-curve/{self.target.lower()}_{filter_name}_diff_light_curve.txt"
-        )
-
-        tab = Table.read(file, format="ascii")
+        file = self.ob.get("obs_data",f"{self.target.lower()}/{filter_name}/light-curve/{self.target.lower()}_{filter_name}_diff_light_curve.txt")
+        fpath = self.data_dir+"/"+file
+        tab = Table.read(fpath, format="ascii")
         return tab["jd_obs"], tab["mag"], tab["quality"]
 
     def _convert_to_phase(self, jd):
@@ -1335,12 +1394,17 @@ class TPGWindow(QWidget):
                 tmp_ob["index"] = n
                 self.p.ob.append(tmp_ob)
         self.p.MakeTime()
+        self.p.ObjectMask()
 
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
-    def calc_vis(self):
+    def calc_ob(self):
         self.p.CalcObject()
+        self.log_e.append(self.p.msg)
+
+    def mask_vis(self):
+        self.p.MaskVisibility()
         for n,ob in enumerate(self.p.ob):
             if "visibility" in ob.keys():
                 self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
@@ -1348,6 +1412,7 @@ class TPGWindow(QWidget):
         self.parent.update_table()
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
+
 
     def mask_moon(self):
         self.p.MaskMoon()
@@ -1368,6 +1433,16 @@ class TPGWindow(QWidget):
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
         self.log_e.setText("Wind masked")
+
+    def mask_twilight(self):
+        self.p.MaskTwilight()
+        for n, ob in enumerate(self.p.ob):
+            if "visibility" in ob.keys():
+                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
+        self.parent.update_table()
+        self.log_e.clear()
+        self.log_e.setText(self.p.msg)
+        self.log_e.setText("Twilight deley masked")
 
     def mask_cycle(self):
         self.p.MaskCycle()
@@ -1460,41 +1535,49 @@ class TPGWindow(QWidget):
         self.load_p.clicked.connect(self.load)
         grid.addWidget(self.load_p, 0, 1)
 
+        self.calc_p = QPushButton('Calc Object')
+        self.calc_p.clicked.connect(self.calc_ob)
+        grid.addWidget(self.calc_p, 1, 1)
+
         self.vis_p = QPushButton('Visibility')
-        self.vis_p.clicked.connect(self.calc_vis)
-        grid.addWidget(self.vis_p, 1, 1)
+        self.vis_p.clicked.connect(self.mask_vis)
+        grid.addWidget(self.vis_p, 2, 1)
 
         self.moon_p = QPushButton('Moon')
         self.moon_p.clicked.connect(self.mask_moon)
-        grid.addWidget(self.moon_p, 2, 1)
+        grid.addWidget(self.moon_p, 3, 1)
 
         self.wind_p = QPushButton('Wind')
         self.wind_p.clicked.connect(self.mask_wind)
-        grid.addWidget(self.wind_p, 3, 1)
+        grid.addWidget(self.wind_p, 4, 1)
+
+        self.twilight_p = QPushButton('Mask Twilight Delay')
+        self.twilight_p.clicked.connect(self.mask_twilight)
+        grid.addWidget(self.twilight_p, 5, 1)
 
         self.cycle_p = QPushButton('Cycle')
         self.cycle_p.clicked.connect(self.mask_cycle)
-        grid.addWidget(self.cycle_p, 4, 1)
+        grid.addWidget(self.cycle_p, 6, 1)
 
         self.time_p = QPushButton('Time')
         self.time_p.clicked.connect(self.mask_startend)
-        grid.addWidget(self.time_p, 5, 1)
+        grid.addWidget(self.time_p, 7, 1)
 
         self.phlim_p = QPushButton('Phase limits')
         self.phlim_p.clicked.connect(self.mask_phstartend)
-        grid.addWidget(self.phlim_p, 6, 1)
+        grid.addWidget(self.phlim_p, 8, 1)
 
         self.phmk_p = QPushButton('Phase density')
         self.phmk_p.clicked.connect(self.mask_phase)
-        grid.addWidget(self.phmk_p, 7, 1)
+        grid.addWidget(self.phmk_p, 9, 1)
 
         self.tpg_p = QPushButton('run tpg')
         self.tpg_p.clicked.connect(self.run_tpg)
-        grid.addWidget(self.tpg_p, 8, 1)
+        grid.addWidget(self.tpg_p, 10, 1)
 
         self.close_p = QPushButton('Close')
         self.close_p.clicked.connect(lambda: self.close())
-        grid.addWidget(self.close_p, 9, 0)
+        grid.addWidget(self.close_p, 11, 0)
 
         self.setLayout(grid)
         self.show()
@@ -1633,3 +1716,24 @@ class ColumnConfigDialog(QDialog):
                 result.append(item.text())
 
         return result
+
+
+def merge_schemas(base: dict, extra: dict) -> dict:
+    merged = base.copy()
+
+    # properties
+    merged.setdefault("properties", {})
+    merged["properties"].update(extra.get("properties", {}))
+
+    # required (jeśli masz)
+    if "required" in base or "required" in extra:
+        merged["required"] = list(set(base.get("required", []) + extra.get("required", [])))
+
+    # additionalProperties – ostrożnie (tu przykład: AND)
+    if "additionalProperties" in base or "additionalProperties" in extra:
+        merged["additionalProperties"] = (
+            base.get("additionalProperties", True)
+            and extra.get("additionalProperties", True)
+        )
+
+    return merged
