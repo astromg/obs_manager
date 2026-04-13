@@ -1,3 +1,23 @@
+
+def seq_time(seq,overhead=10):
+
+    slotTime = 0
+    k = 1
+    if "x(" in seq and ")" in seq:
+        k = seq.split("x")[0]
+        k = int(k)
+        seq0 = seq.split("x(")[1].split(")")[0]
+    else:
+        seq0 = seq
+    for x_seq in seq0.split(","):
+        slotTime = slotTime + (
+                float(x_seq.split("/")[0]) * (float(x_seq.split("/")[2]) + float(overhead)))
+    slotTime = (k * slotTime)
+
+    return slotTime
+
+
+
 class MiscLine:
     def __init__(self, raw_line, line_index):
         self.ob_line = False

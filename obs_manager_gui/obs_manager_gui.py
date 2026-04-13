@@ -40,7 +40,7 @@ from pyaraucaria.ob_validator import ObsValidator
 
 from tpg.telescope_plan_generator import TelescopePlanGenerator as tpg
 from .obs_manager_lib import *
-
+from .plan_gui import Plan_Gui
 
 warnings.simplefilter('ignore', category=AstropyWarning)
 
@@ -62,6 +62,8 @@ class OM_Gui(QWidget):
 
         #print(self.cfg)
 
+
+
         self.schema_columns = ObsValidator.load_schema("tpg_schema")["properties"].keys()
         self.columns = ["ok_ob","ctc","last_obs","tpg_vis"] + self.cfg["columns"]
 
@@ -70,6 +72,9 @@ class OM_Gui(QWidget):
         self.mkUI()
         self.tel = self.tel_s.currentText()
         self.update_almanac()
+
+        self.plan_gui = Plan_Gui(self)
+        self.plan_gui.show()
 
     def update_table(self):
 
@@ -166,7 +171,7 @@ class OM_Gui(QWidget):
                                             font.setPointSize(20)
                                             item.setFont(font)
                                         elif data["validator"]["valid"]:
-                                            txt = "\u2705"
+                                            txt = "\u2714"
                                             item = QTableWidgetItem(txt)
                                             item.setForeground(QColor("green"))
                                         else:
@@ -175,7 +180,11 @@ class OM_Gui(QWidget):
                                             item.setForeground(QColor("red"))
 
                                     item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                                    item.setBackground(QColor(200, 200, 200))
+                                    if j % 2 == 0:
+                                        color = QColor(210, 210, 210)  # jasny szary
+                                    else:
+                                        color = QColor(220, 220, 220)
+                                    item.setBackground(color)
                                 elif key == "tpg_vis":
 
                                     vis = data["tpg"].get("visibility",None)
@@ -192,14 +201,22 @@ class OM_Gui(QWidget):
                                     else:
                                         item = QTableWidgetItem("")
                                         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                                        item.setBackground(QColor(200, 200, 200))
+                                        if j % 2 == 0:
+                                            color = QColor(210, 210, 210)  # jasny szary
+                                        else:
+                                            color = QColor(220, 220, 220)
+                                    item.setBackground(color)
                                 elif key == "ctc":
 
                                     #ctc = data["tpg"].get("ob_time",None)
 
                                     item = QTableWidgetItem("")
                                     item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                                    item.setBackground(QColor(200, 200, 200))
+                                    if j % 2 == 0:
+                                        color = QColor(210, 210, 210)  # jasny szary
+                                    else:
+                                        color = QColor(220, 220, 220)
+                                    item.setBackground(color)
 
                                 elif key == "last_obs":
 
@@ -211,7 +228,11 @@ class OM_Gui(QWidget):
                                         item = QTableWidgetItem("")
 
                                     item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                                    item.setBackground(QColor(200, 200, 200))
+                                    if j % 2 == 0:
+                                        color = QColor(210, 210, 210)  # jasny szary
+                                    else:
+                                        color = QColor(220, 220, 220)
+                                    item.setBackground(color)
 
                                 else:
                                     item = QTableWidgetItem("")
@@ -270,7 +291,11 @@ class OM_Gui(QWidget):
         if len(line.strip()) > 0:
             if len(line.split()) > 0:
                 if "#" not in line.split()[0]:
-                    txt = f'OBJECT {line}'
+                    # wywalic jak juz bedzie wszystko konsystentnie
+                    if "OBJECT" in line.split()[0]:
+                        txt = line
+                    else:
+                        txt = f'OBJECT {line}'
                     ob_tmp = ObsPlanParser.convert_from_string(txt)
 
                     if ob_tmp is None:
@@ -484,45 +509,25 @@ class OM_Gui(QWidget):
                 data["validator"]["result"] = result["result"]
         self.update_table()
 
+    def add_to_plan(self):
+        indx = [x["index"] for x in self.master_data]
+        if self.i > -1:
+            i = indx.index(self.i)
+            if self.master_data[i]["ob"]:
+                ob = self.master_data[i]["ob"]
+                self.plan_gui.add(ob)
+
     def save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as file:
                     txt = ""
-                    for ob in self.ob:
-                        if ob["active"]:
-                            line = ""
-                            line = line + f'{ob["name"]:20}    '
-                            line = line + f'{ob["ra"]:15}    '
-                            line = line + f'{ob["dec"]:15}    '
-
-                            if "seq" in ob.keys():
-                                if len(ob["seq"].strip())<10:
-                                    line = line + f'seq={ob["seq"].strip():10}    '
-                                elif  len(ob["seq"].strip())>9 and len(ob["seq"].strip())<30:
-                                    line = line + f'seq={ob["seq"].strip():30}    '
-                                else:
-                                    line = line + f'seq={ob["seq"].strip():60}    '
-
-                            for x in self.cfg["columns"]:
-                                if x in ob.keys() and x not in ["name","ra","dec","seq","comment"]:
-                                    if len(ob[x].strip()) > 0:
-                                        line = line + f'{x}={str(ob[x]).strip()}    '
-
-                            if "comment" in ob.keys():
-                                if len(ob["comment"].strip())>0:
-                                    tmp = ob["comment"]
-                                    line = line + f'comment=\"{tmp}\" '
-
-                            txt = txt + line
+                    for data in self.master_data:
+                        if data["ob"]:
+                            txt = txt + ObsValidator.convert_from_obdict(data.get("ob"))+"\n"
                         else:
-                            txt = txt + ob["line"]
-                        if not txt.endswith("\n"):
-                            txt = txt + "\n"
-
-
-                    #print(txt)
+                            txt = txt + data["line"]
                     file.write(txt)
                     print(f'objects saved to {file_path}')
             except Exception as e:
@@ -555,7 +560,8 @@ class OM_Gui(QWidget):
 
     def mkUI(self):
         self.setWindowTitle('OCM observing plan manager')
-        self.setGeometry(50, 50, 1400, 800)
+        #self.setGeometry(50, 50, 1400, 800)
+        self.resize(1400, 800)
 
         grid = QGridLayout()
 
@@ -651,6 +657,10 @@ class OM_Gui(QWidget):
         self.validate_p.clicked.connect(self.validate_ob)
         grid.addWidget(self.validate_p, w, 1)
 
+        self.add_p = QPushButton("Add to Plan")
+        self.add_p.clicked.connect(self.add_to_plan)
+        grid.addWidget(self.add_p, w, 4)
+
         w = w + 1
 
         self.tpg_p = QPushButton("TPG")
@@ -685,7 +695,7 @@ class OM_Gui(QWidget):
 
         w = w + 1
         self.close_p = QPushButton("Close")
-        self.close_p.clicked.connect(self.close)
+        self.close_p.clicked.connect(QApplication.quit)
         grid.addWidget(self.close_p, w, 4, 1, 3)
 
         self.setLayout(grid)
