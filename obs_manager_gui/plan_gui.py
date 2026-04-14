@@ -473,24 +473,30 @@ class PlotWindow(QWidget):
         # Rysowanie planu obserwacji (obsługa RA/DEC + UT + sunrise/sunset)
         # ---------------------------------------------------------
 
+        # ---------------------------------------------------------
+        # Rysowanie planu obserwacji
+        # ---------------------------------------------------------
+
         if len(self.parent.plan) > 0:
 
             colors = ["c", "m"]
             j = 0
 
-            for data in self.parent.plan:
+            for i, data in enumerate(self.parent.plan):
 
                 ob = data["ob"]
                 slotTime = data.get("slotTime", 0)
-
-                if slotTime <= 0 and not (ob.get("ut") or ob.get("sunset") or ob.get("sunrise")):
-                    continue
-
                 start_t = ephem.Date(data["ut"])
-                end_t = start_t + ephem.second * max(slotTime, 0)
+
+                if i < len(self.parent.plan) - 1:
+                    next_t = ephem.Date(self.parent.plan[i + 1]["ut"])
+                else:
+                    next_t = start_t + ephem.second * slotTime
 
                 color = colors[j % len(colors)]
-                j += 1
+
+                if ob.get("ra") and ob.get("dec"):
+                    j += 1
 
                 if slotTime < 60:
                     fontsize = 2
@@ -501,10 +507,15 @@ class PlotWindow(QWidget):
                 else:
                     fontsize = 9
 
+                # --------------------------------------------------
+                # TARGET RA/DEC
+                # --------------------------------------------------
                 if ob.get("ra") and ob.get("dec"):
 
                     ra = ob["ra"]
                     dec = ob["dec"]
+
+                    end_t = start_t + ephem.second * slotTime
 
                     t_tab = []
                     alt_tab = []
@@ -529,44 +540,54 @@ class PlotWindow(QWidget):
                     self.axes.text(start_t, 93, ob.get("name", "target"), rotation=90, fontsize=fontsize, color=color,
                                    va="top", ha="left")
 
+                    # jeśli po ekspozycji był dodatkowy wait, zaznacz go subtelnie
+                    if end_t < next_t:
+                        self.axes.fill_betweenx([0, 8], end_t, next_t, color=color, alpha=0.15)
+
+                # --------------------------------------------------
+                # WAIT UNTIL UT
+                # --------------------------------------------------
                 elif ob.get("ut"):
 
-                    wait_to = start_t
-                    wait_from = self.t_now if self.t_now < wait_to else wait_to
-
-                    if wait_from < wait_to:
-                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="green", alpha=0.45)
-                        self.axes.text(wait_from, 10, f"WAIT UT {ob['ut']}", rotation=90, fontsize=8, color="green",
+                    if start_t < next_t:
+                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="green", alpha=0.45)
+                        self.axes.text(start_t, 10, f"WAIT UT {ob['ut']}", rotation=90, fontsize=8, color="green",
                                        va="bottom")
 
+                # --------------------------------------------------
+                # WAIT SUNSET
+                # --------------------------------------------------
                 elif ob.get("sunset"):
 
-                    wait_to = start_t
-                    wait_from = self.t_now if self.t_now < wait_to else wait_to
-
-                    if wait_from < wait_to:
-                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="darkorange", alpha=0.45)
-                        self.axes.text(wait_from, 10, "WAIT SUNSET", rotation=90, fontsize=8, color="darkorange",
+                    if start_t < next_t:
+                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="darkorange", alpha=0.45)
+                        self.axes.text(start_t, 10, "WAIT SUNSET", rotation=90, fontsize=8, color="darkorange",
                                        va="bottom")
 
+                # --------------------------------------------------
+                # WAIT SUNRISE
+                # --------------------------------------------------
                 elif ob.get("sunrise"):
 
-                    wait_to = start_t
-                    wait_from = self.t_now if self.t_now < wait_to else wait_to
+                    if start_t < next_t:
+                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="red", alpha=0.45)
+                        self.axes.text(start_t, 10, "WAIT SUNRISE", rotation=90, fontsize=8, color="red", va="bottom")
 
-                    if wait_from < wait_to:
-                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="red", alpha=0.45)
-                        self.axes.text(wait_from, 10, "WAIT SUNRISE", rotation=90, fontsize=8, color="red", va="bottom")
-
+                # --------------------------------------------------
+                # WAIT SEC
+                # --------------------------------------------------
                 elif ob.get("sec"):
 
-                    self.axes.fill_betweenx([0, 8], start_t, end_t, color="purple", alpha=0.35)
+                    self.axes.fill_betweenx([0, 8], start_t, next_t, color="purple", alpha=0.35)
                     self.axes.text(start_t, 10, f"WAIT {int(slotTime)}s", rotation=90, fontsize=8, color="purple",
                                    va="bottom")
 
+                # --------------------------------------------------
+                # INNE
+                # --------------------------------------------------
                 else:
 
-                    self.axes.fill_betweenx([0, 8], start_t, end_t, color="grey", alpha=0.25)
+                    self.axes.fill_betweenx([0, 8], start_t, next_t, color="grey", alpha=0.25)
                     self.axes.text(start_t, 10, ob.get("name", "WAIT"), rotation=90, fontsize=8, color="black",
                                    va="bottom")
 
