@@ -149,6 +149,8 @@ class Plan_Gui(QWidget):
                             txt = ob["command_name"]
                         elif ob["command_name"] == "STOP":
                             txt = ob["command_name"]
+                        elif ob["command_name"] == "BELL":
+                            txt = ob["command_name"]
                         elif ob["command_name"] == "WAIT":
                             txt = ""
                             for k in ["sec", "ut", "sunrise", "sunset"]:
@@ -158,6 +160,8 @@ class Plan_Gui(QWidget):
                             txt = ob["command_name"]
                         elif ob["command_name"] == "DARK":
                             txt = ob["command_name"]
+                        else:
+                            txt = ob["command_name"]
 
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
@@ -166,7 +170,7 @@ class Plan_Gui(QWidget):
                         txt = ""
                         if data.get("ut",None):
                             txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
-                            txt = data["ut"]
+                            #txt = data["ut"]
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
@@ -289,8 +293,11 @@ class Plan_Gui(QWidget):
             try:
                 with open(file_path, 'r') as plik:
                     for line in plik:
-                        ob_tmp = ObsPlanParser.convert_from_string(line)
-                        ob = ObsValidator.convert_to_obdict(ob_tmp)
+                        if "BELL" in line.split()[0]:
+                            ob = {"command_name":"BELL"}
+                        else:
+                            ob_tmp = ObsPlanParser.convert_from_string(line)
+                            ob = ObsValidator.convert_to_obdict(ob_tmp)
                         if ob:
                             self.add(ob)
             except Exception as e:
@@ -469,14 +476,6 @@ class PlotWindow(QWidget):
         self.t0_dusk = self.oca.next_setting(ephem.Sun(),use_center=True)
         self.t_end_dusk = self.oca.next_rising(ephem.Sun(),use_center=True)
 
-        # ---------------------------------------------------------
-        # Rysowanie planu obserwacji (obsługa RA/DEC + UT + sunrise/sunset)
-        # ---------------------------------------------------------
-
-        # ---------------------------------------------------------
-        # Rysowanie planu obserwacji
-        # ---------------------------------------------------------
-
         if len(self.parent.plan) > 0:
 
             colors = ["c", "m"]
@@ -499,7 +498,7 @@ class PlotWindow(QWidget):
                     j += 1
 
                 if slotTime < 60:
-                    fontsize = 2
+                    fontsize = 3
                 elif slotTime < 5 * 60:
                     fontsize = 5
                 elif slotTime < 10 * 60:
@@ -507,9 +506,18 @@ class PlotWindow(QWidget):
                 else:
                     fontsize = 9
 
-                # --------------------------------------------------
-                # TARGET RA/DEC
-                # --------------------------------------------------
+
+                if ob.get("command_name", None):
+                    if ob.get("command_name") == "STOP":
+                        self.axes.axvline(x=start_t, color="red")
+                        self.axes.text(start_t + 2*ephem.minute, 7, "STOP", rotation=90, fontsize=8, color="red",va="bottom")
+                    elif ob.get("command_name") == "BELL":
+                        self.axes.axvline(x=start_t, color="skyblue")
+                        self.axes.text(start_t+ 2*ephem.minute, 7, "BELL", rotation=90, fontsize=8, color="skyblue",va="bottom")
+                    elif ob.get("command_name") == "DOMEFLAT":
+                        self.axes.fill_betweenx([0, 4], start_t, next_t, color="paleturquoise", alpha=0.5)
+                        self.axes.text((start_t+next_t)/2, 7, "DOMEFLAT", rotation=90, fontsize=8, color="paleturquoise",va="bottom")
+
                 if ob.get("ra") and ob.get("dec"):
 
                     ra = ob["ra"]
@@ -537,62 +545,32 @@ class PlotWindow(QWidget):
                         t += ephem.minute
 
                     self.axes.plot(t_tab, alt_tab, color=color, linewidth=2)
-                    self.axes.text(start_t, 93, ob.get("name", "target"), rotation=90, fontsize=fontsize, color=color,
-                                   va="top", ha="left")
+                    self.axes.text(start_t, 93, ob.get("name", "target"), rotation=90, fontsize=fontsize, color=color,va="bottom", ha="left")
 
-                    # jeśli po ekspozycji był dodatkowy wait, zaznacz go subtelnie
-                    if end_t < next_t:
-                        self.axes.fill_betweenx([0, 8], end_t, next_t, color=color, alpha=0.15)
+                    # if end_t < next_t:
+                    #     self.axes.fill_betweenx([0, 4], end_t, next_t, color="red", alpha=0.9)
 
-                # --------------------------------------------------
-                # WAIT UNTIL UT
-                # --------------------------------------------------
                 elif ob.get("ut"):
-
                     if start_t < next_t:
-                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="green", alpha=0.45)
-                        self.axes.text(start_t, 10, f"WAIT UT {ob['ut']}", rotation=90, fontsize=8, color="green",
-                                       va="bottom")
+                        self.axes.fill_betweenx([0, 4], start_t, next_t, color="purple", alpha=0.5)
+                        self.axes.text((start_t+next_t)/2, 7, f"WAIT UT {ob['ut']}", rotation=90, fontsize=8, color="purple", va="bottom")
 
-                # --------------------------------------------------
-                # WAIT SUNSET
-                # --------------------------------------------------
                 elif ob.get("sunset"):
-
                     if start_t < next_t:
-                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="darkorange", alpha=0.45)
-                        self.axes.text(start_t, 10, "WAIT SUNSET", rotation=90, fontsize=8, color="darkorange",
-                                       va="bottom")
+                        self.axes.fill_betweenx([0, 4], start_t, next_t, color="darkorange", alpha=0.5)
+                        self.axes.text((start_t+next_t)/2, 7, "WAIT SUNSET", rotation=90, fontsize=8, color="red", va="bottom")
 
-                # --------------------------------------------------
-                # WAIT SUNRISE
-                # --------------------------------------------------
                 elif ob.get("sunrise"):
-
                     if start_t < next_t:
-                        self.axes.fill_betweenx([0, 8], start_t, next_t, color="red", alpha=0.45)
-                        self.axes.text(start_t, 10, "WAIT SUNRISE", rotation=90, fontsize=8, color="red", va="bottom")
+                        self.axes.fill_betweenx([0, 4], start_t, next_t, color="darkorange", alpha=0.5)
+                        self.axes.text((start_t+next_t)/2, 7, "WAIT SUNRISE", rotation=90, fontsize=8, color="red", va="bottom")
 
-                # --------------------------------------------------
-                # WAIT SEC
-                # --------------------------------------------------
                 elif ob.get("sec"):
+                    self.axes.fill_betweenx([0, 4], start_t, next_t, color="blue", alpha=0.5)
+                    self.axes.text((start_t+next_t)/2, 7, f"WAIT {int(slotTime)}s", rotation=90, fontsize=8, color="blue",va="bottom")
 
-                    self.axes.fill_betweenx([0, 8], start_t, next_t, color="purple", alpha=0.35)
-                    self.axes.text(start_t, 10, f"WAIT {int(slotTime)}s", rotation=90, fontsize=8, color="purple",
-                                   va="bottom")
-
-                # --------------------------------------------------
-                # INNE
-                # --------------------------------------------------
-                else:
-
-                    self.axes.fill_betweenx([0, 8], start_t, next_t, color="grey", alpha=0.25)
-                    self.axes.text(start_t, 10, ob.get("name", "WAIT"), rotation=90, fontsize=8, color="black",
-                                   va="bottom")
 
         self.axes.grid(True, alpha=0.25)
-        self.axes.set_title("Observation Plan")
         self.axes.set_ylim(0, 90)
         #self.axes.set_xlim(self.t0-2*ephem.hour,self.t_end+2*ephem.hour)
         self.axes.fill_betweenx([0, 35], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
@@ -601,7 +579,7 @@ class PlotWindow(QWidget):
         self.axes.fill_betweenx([0, 90], self.t_end_dusk, self.t_end, color="yellow", alpha=0.1)
         self.axes.axvline(x=self.t_now, color="blue")
         txt = str(self.t_now).split()[1].split(":")[0] + ":" + str(self.t_now).split()[1].split(":")[1]
-        self.axes.text(self.t_now, 82, f"{txt}", rotation=90, fontsize=12)
+        self.axes.text(self.t_now + 2*ephem.minute, 30, f"{txt}", rotation=90, fontsize=12)
 
         xtics = [self.t0, self.t0_dusk, self.t_end_dusk, self.t_end]
         t =  ephem.Date(self.t0_dusk+30*ephem.minute)
@@ -623,178 +601,6 @@ class PlotWindow(QWidget):
 
         self.canvas.draw()
         self.show()
-
-
-    def refresh2(self):
-        self.axes.clear()
-
-        self.oca = ephem.Observer()
-        self.oca.lon = str(self.parent.parent.cfg["obs_longitude"])
-        self.oca.lat = str(self.parent.parent.cfg["obs_latitude"])
-        self.oca.elev = float(self.parent.parent.cfg["obs_elevation"])
-        self.oca.horizon = "0"
-
-        self.obs_time = self.parent.obs_time
-        self.oca.date = str(Time(self.obs_time, scale='utc'))
-        self.t_now = self.oca.date
-
-        # liczenie wschodu slonca i zachodu
-        t1 = self.oca.next_setting(ephem.Sun(), use_center=True) - self.oca.date
-        t2 = self.oca.next_rising(ephem.Sun(), use_center=True) - self.oca.date
-        if t1 < t2 :
-            self.t0 = self.oca.next_setting(ephem.Sun(),use_center=True)
-        else:
-            self.t0 = self.oca.previous_setting(ephem.Sun(),use_center=True)
-        self.oca.date = self.t0
-        self.t_end = self.oca.next_rising(ephem.Sun(),use_center=True)
-
-        # liczenie zmierzchu
-        self.oca.horizon = "-18"
-        self.t0_dusk = self.oca.next_setting(ephem.Sun(),use_center=True)
-        self.t_end_dusk = self.oca.next_rising(ephem.Sun(),use_center=True)
-
-
-        # Rysowanie
-
-        if len(self.parent.plan)>0:
-            color = ["c", "m"]
-            self.t = self.t_now
-
-            j=0
-            for data in self.parent.plan:
-                ob = data["ob"]
-                fontsize = 9
-                if j==len(color): j=0
-        #         tmp_ok = False
-        #         if self.parent.current_i > -1 and i >= self.parent.current_i: tmp_ok = True
-        #         if i >= self.parent.next_i: tmp_ok = True
-        #         if 'skip' in self.parent.plan[i].keys():
-        #             if self.parent.plan[i]['skip']:
-        #                 tmp_ok = False
-        #         if 'skip_alt' in self.parent.plan[i].keys():
-        #             if self.parent.plan[i]['skip_alt']:
-        #                 tmp_ok = False
-        #         if 'ok' in self.parent.plan[i].keys():
-        #             if not self.parent.plan[i]['ok']:
-        #                 tmp_ok = False
-        #
-        #         if tmp_ok:
-        #             if 'type' in self.parent.plan[i].keys():
-        #                 if self.parent.plan[i]["type"] == "STOP":
-        #                     self.axes.axvline(x=self.t, color="red",alpha=0.5)
-        #                     self.axes.text(self.t,2,"STOP",rotation=90,fontsize=fontsize)
-        #
-        #             if "wait" in self.parent.plan[i].keys():
-        #                 if len(self.parent.plan[i]["wait"]) > 0:
-        #                     slotTime = float(self.parent.plan[i]["wait"])
-        #                     self.axes.fill_betweenx([0, 2], self.t, self.t+ephem.second*slotTime, color="r", alpha=0.5)
-        #                     self.axes.text(self.t, 3, f"WAIT {int(slotTime)}s", rotation=90, fontsize=fontsize)
-        #                     self.t = self.t + ephem.second * slotTime
-        #
-        #
-        #             if "wait_ut" in self.parent.plan[i].keys():
-        #                 if len(self.parent.plan[i]["wait_ut"]) > 0:
-        #                     wait_ut = ephem.Date(str(ephem.Date(self.t)).split()[0] + " " + self.parent.plan[i]["wait_ut"])
-        #                     if self.t < wait_ut:
-        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
-        #                                                 alpha=0.5)
-        #                         self.axes.text(self.t, 3, f"WAIT UT {wait_ut}", rotation=90, fontsize=fontsize)
-        #                         self.t = wait_ut
-        #
-        #             if "wait_sunset" in self.parent.plan[i].keys():
-        #                 if len(self.parent.plan[i]["wait_sunset"]) > 0:
-        #                     self.oca.horizon = self.parent.plan[i]["wait_sunset"]
-        #                     wait_ut = self.oca.next_setting(ephem.Sun(), use_center=True)
-        #                     if self.t < wait_ut:
-        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
-        #                                                 alpha=0.5)
-        #                         self.axes.text(self.t, 3, f"WAIT SUNSET {wait_ut}", rotation=90, fontsize=fontsize)
-        #                         self.t = wait_ut
-        #
-        #             if "wait_sunrise" in self.parent.plan[i].keys():
-        #                 if len(self.parent.plan[i]["wait_sunrise"]) > 0:
-        #                     self.oca.horizon = self.parent.plan[i]["wait_sunrise"]
-        #                     wait_ut = self.oca.next_rising(ephem.Sun(), use_center=True)
-        #                     if self.t < wait_ut:
-        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
-        #                                                 alpha=0.5)
-        #                         self.axes.text(self.t, 3, f"WAIT SUNRISE {wait_ut}", rotation=90, fontsize=fontsize)
-        #                         self.t = wait_ut
-        #
-
-                slotTime = data["slotTime"]
-
-                if slotTime < 60:
-                    fontsize = 2
-                if slotTime < 60 * 5:
-                    fontsize = 5
-                if slotTime < 60 * 10:
-                    fontsize = 7
-                else:
-                    fontsize = 9
-
-                if "ra" in ob.keys():
-                    ra = ob["ra"]
-                    dec = ob["dec"]
-                    t_tab = []
-                    alt_tab = []
-
-                    t = self.t
-                    while t <= self.t + ephem.second * slotTime:
-                        self.oca.date = t
-                        star = ephem.FixedBody()
-                        star._ra = str(ra)
-                        star._dec = str(dec)
-                        star.compute(self.oca)
-
-                        alt = float(star.alt) * 180.0 / ephem.pi
-                        az = float(star.az) * 180.0 / ephem.pi
-
-                        t_tab.append(t)
-                        alt_tab.append(alt)
-
-                        t = t + ephem.minute
-
-                    self.axes.plot(t_tab,alt_tab,color=color[j])
-                    self.axes.text(self.t, 93, f"{ob['name']}", color=color[j], rotation=90, fontsize=fontsize)
-                    j=j+1
-
-                self.t = self.t + ephem.second * slotTime
-
-
-        self.axes.set_ylim(0, 90)
-        #self.axes.set_xlim(self.t0-2*ephem.hour,self.t_end+2*ephem.hour)
-        self.axes.fill_betweenx([0, 35], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
-        self.axes.fill_betweenx([80, 90], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
-        self.axes.fill_betweenx([0, 90], self.t0, self.t0_dusk, color="yellow", alpha=0.1)
-        self.axes.fill_betweenx([0, 90], self.t_end_dusk, self.t_end, color="yellow", alpha=0.1)
-        self.axes.axvline(x=self.t_now, color="blue")
-        txt = str(self.t_now).split()[1].split(":")[0] + ":" + str(self.t_now).split()[1].split(":")[1]
-        self.axes.text(self.t_now, 82, f"{txt}", rotation=90, fontsize=12)
-
-        xtics = [self.t0, self.t0_dusk, self.t_end_dusk, self.t_end]
-        t =  ephem.Date(self.t0_dusk+30*ephem.minute)
-        while t < ephem.Date(self.t_end_dusk-30*ephem.minute):
-            t = ephem.Date(t) + ephem.hour
-            h = str(ephem.Date(t)).split()
-            xtics.append( ephem.Date(h[0]+" "+h[1].split(":")[0]+":00:00"))
-        xtics_labels = [str(x).split()[1].split(":")[0]+":"+str(x).split()[1].split(":")[1] for x in xtics]
-        self.axes.set_xticks(xtics)
-        self.axes.set_xticklabels(xtics_labels,rotation=45,minor=False)
-
-        self.axes.set_yticks([0, 35, 80, 90])
-        self.axes.set_yticklabels(["0 deg", "35 deg", "80 deg", "90 deg"])
-
-        #self.axes.set_ylabel("altitude")
-        #self.axes.set_xlabel("UT")
-        self.fig.subplots_adjust(bottom=0.12,top=0.8,left=0.08,right=0.98)
-        #self.fig.tight_layout()
-
-        self.canvas.draw()
-        self.show()
-
-
-
 
 
     def mkUI(self):
