@@ -48,19 +48,30 @@ class Plan_Gui(QWidget):
         oca.lon = str(self.parent.cfg["obs_longitude"])
         oca.lat = str(self.parent.cfg["obs_latitude"])
         oca.elev = float(self.parent.cfg["obs_elevation"])
-        # oca.horizon = str(self.cfg[self.tel]["hsun"])
+        oca.horizon = "0"
 
         moon = ephem.Moon()
-        #sun = ephem.Sun()
 
         self.obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
         t = Time(self.obs_time, scale='utc')
 
         for data in self.plan:
-            oca.date = str(t)
-            data["ut"] = str(t)
-
             ob = data["ob"]
+            oca.date = str(t)
+            if ob.get("ra",None) and ob.get("dec",None):
+                s = ephem.FixedBody()
+                s._ra = ob["ra"]
+                s._dec = ob["dec"]
+                s.compute(oca)
+                moon.compute(oca)
+                alt = float(s.alt) * 180.0 / ephem.pi
+                az = float(s.az) * 180.0 / ephem.pi
+                moon_sep = float(ephem.separation(s, moon)) * 180.0 / ephem.pi
+                data["alt"] = alt
+                data["az"] = az
+                data["moon_sep"] = moon_sep
+
+            data["ut"] = str(t)
 
             if ob.get("ob_time", None):
                 slotTime = ob["ob_time"]
@@ -76,60 +87,27 @@ class Plan_Gui(QWidget):
 
             if ob.get("ut", None):
                 ut = ob["ut"]
-
-                ut_time = datetime.datetime.strptime(ut, "%Y-%m-%d %H:%M:%S")  # Przykład formatu
-                if ut_time < t:  # Jezeli ut mniejsze od aktualnego czasu,
-                    ut_time = ut_time + datetime.timedelta(days=1)  # Dodajemy 1 dzień
-
-                # Teraz ustawiamy czas oczekiwania na 'ut_time'
-                t = ut_time
+                ut_time = datetime.datetime.strptime(ut, "%H:%M:%S").time()
+                ut_dt = datetime.datetime.combine(t.datetime.date(), ut_time)
+                if ut_dt < t.datetime:
+                    ut_dt = ut_dt + datetime.timedelta(days=1)
+                t = Time(ut_dt, scale='utc')
 
 
+            elif ob.get("sunset", None):
+                oca.horizon = ob["sunset"]
+                sunrise_ut = oca.next_rising(ephem.Sun(), use_center=True)
+                sunset_ut = oca.next_setting(ephem.Sun(), use_center=True)
+                if sunset_ut < sunrise_ut:
+                    t = Time(sunset_ut.datetime(), scale='utc')
 
-            # elif ob.get("sunrise", None):
-            # elif ob.get("sunset", None):
-            #
-            # if "wait_ut" in self.plan[tel][i].keys():
-            #     if len(self.plan[tel][i]["wait_ut"]) > 0:
-            #         wait_ut = ephem.Date(str(ephem.Date(ob_time)).split()[0] + " " + self.plan[tel][i]["wait_ut"])
-            #         if ephem.Date(ob_time) < ephem.Date(wait_ut):
-            #             ob_time = wait_ut
-            # if "wait_sunset" in self.plan[tel][i].keys():
-            #     if len(self.plan[tel][i]["wait_sunset"]) > 0:
-            #         oca = ephem.Observer()
-            #         oca.date = ephem.now()
-            #         oca.lat = self.observatory[0]
-            #         oca.lon = self.observatory[1]
-            #         oca.elevation = float(self.observatory[2])
-            #         oca.horizon = self.plan[tel][i]["wait_sunset"]
-            #         wait_ut = oca.next_setting(ephem.Sun(), use_center=True)
-            #         if ob_time < wait_ut:
-            #             ob_time = wait_ut
-            # if "wait_sunrise" in self.plan[tel][i].keys():
-            #     if len(self.plan[tel][i]["wait_sunrise"]) > 0:
-            #         oca = ephem.Observer()
-            #         oca.date = ephem.now()
-            #         oca.lat = self.observatory[0]
-            #         oca.lon = self.observatory[1]
-            #         oca.elevation = float(self.observatory[2])
-            #         oca.horizon = self.plan[tel][i]["wait_sunrise"]
-            #         wait_ut = oca.next_rising(ephem.Sun(), use_center=True)
-            #         if ob_time < wait_ut:
-            #             ob_time = wait_ut
+            elif ob.get("sunrise", None):
+                oca.horizon = ob["sunrise"]
+                sunrise_ut = oca.next_rising(ephem.Sun(), use_center=True)
+                sunset_ut = oca.next_setting(ephem.Sun(), use_center=True)
+                if sunrise_ut < sunset_ut:
+                    t = Time(sunrise_ut.datetime(), scale='utc')
 
-
-            if ob.get("ra",None) and ob.get("dec",None):
-                s = ephem.FixedBody()
-                s._ra = ob["ra"]
-                s._dec = ob["dec"]
-                s.compute(oca)
-                moon.compute(oca)
-                alt = float(s.alt) * 180.0 / ephem.pi
-                az = float(s.az) * 180.0 / ephem.pi
-                moon_sep = float(ephem.separation(s, moon)) * 180.0 / ephem.pi
-                data["alt"] = alt
-                data["az"] = az
-                data["moon_sep"] = moon_sep
 
 
     def update_table(self):
@@ -183,21 +161,21 @@ class Plan_Gui(QWidget):
 
                     elif key == "UT":
                         txt = ""
-                        if ob.get("ut",None):
+                        if data.get("ut",None):
                             txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
                     elif key == "Alt@UT":
                         txt = ""
-                        if ob.get("alt",None):
+                        if data.get("alt",None):
                             txt = f'{data["alt"]:.0f}'
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
                     elif key == "Moon dist":
                         txt = ""
-                        if ob.get("moon_sep",None):
+                        if data.get("moon_sep",None):
                             txt = f'{data["moon_sep"]:.0f}'
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
