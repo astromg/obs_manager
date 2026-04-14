@@ -437,7 +437,196 @@ class PlotWindow(QWidget):
         self.refresh()
         self.close_p.clicked.connect(lambda: self.close())
 
-    def refresh(self):
+    def refreash(self):
+        # ---------------------------------------------------------
+        # Rysowanie planu obserwacji (obsługa RA/DEC + UT + sunrise/sunset)
+        # ---------------------------------------------------------
+
+        if len(self.parent.plan) > 0:
+
+            colors = ["c", "m", "b", "g"]
+            j = 0
+
+            for data in self.parent.plan:
+
+                ob = data["ob"]
+                slotTime = data.get("slotTime", 0)
+
+                # jeżeli brak czasu trwania i brak znacznika - pomijamy
+                if slotTime <= 0 and not (
+                        ob.get("ut") or ob.get("sunset") or ob.get("sunrise")
+                ):
+                    continue
+
+                start_t = ephem.Date(data["ut"])
+                end_t = start_t + ephem.second * max(slotTime, 0)
+
+                color = colors[j % len(colors)]
+                j += 1
+
+                # -------------------------
+                # dobór fontsize
+                # -------------------------
+                if slotTime < 60:
+                    fontsize = 2
+                elif slotTime < 300:
+                    fontsize = 5
+                elif slotTime < 600:
+                    fontsize = 7
+                else:
+                    fontsize = 9
+
+                # =====================================================
+                # 1. Normalny target z RA / DEC
+                # =====================================================
+                if ob.get("ra") and ob.get("dec"):
+
+                    ra = ob["ra"]
+                    dec = ob["dec"]
+
+                    t_tab = []
+                    alt_tab = []
+
+                    t = start_t
+                    while t <= end_t:
+                        self.oca.date = t
+
+                        star = ephem.FixedBody()
+                        star._ra = str(ra)
+                        star._dec = str(dec)
+                        star.compute(self.oca)
+
+                        alt = float(star.alt) * 180.0 / ephem.pi
+
+                        t_tab.append(t)
+                        alt_tab.append(alt)
+
+                        t += ephem.minute
+
+                    self.axes.plot(
+                        t_tab,
+                        alt_tab,
+                        color=color,
+                        linewidth=2
+                    )
+
+                    self.axes.text(
+                        start_t,
+                        93,
+                        ob.get("name", "target"),
+                        rotation=90,
+                        fontsize=fontsize,
+                        color=color,
+                        va="top",
+                        ha="left"
+                    )
+
+                    # delikatne tło slotu
+                    self.axes.axvspan(
+                        start_t,
+                        end_t,
+                        color=color,
+                        alpha=0.05
+                    )
+
+                # =====================================================
+                # 2. Marker UT
+                # =====================================================
+                elif ob.get("ut"):
+
+                    self.axes.axvline(
+                        x=start_t,
+                        color="green",
+                        linestyle="--",
+                        linewidth=1.5,
+                        alpha=0.8
+                    )
+
+                    self.axes.text(
+                        start_t,
+                        70,
+                        f"UT {ob['ut']}",
+                        rotation=90,
+                        fontsize=8,
+                        color="green",
+                        va="bottom"
+                    )
+
+                # =====================================================
+                # 3. Marker SUNSET
+                # =====================================================
+                elif ob.get("sunset"):
+
+                    self.axes.axvline(
+                        x=start_t,
+                        color="darkorange",
+                        linestyle="--",
+                        linewidth=1.5,
+                        alpha=0.9
+                    )
+
+                    self.axes.text(
+                        start_t,
+                        60,
+                        f"Sunset {ob['sunset']}",
+                        rotation=90,
+                        fontsize=8,
+                        color="darkorange",
+                        va="bottom"
+                    )
+
+                # =====================================================
+                # 4. Marker SUNRISE
+                # =====================================================
+                elif ob.get("sunrise"):
+
+                    self.axes.axvline(
+                        x=start_t,
+                        color="red",
+                        linestyle="--",
+                        linewidth=1.5,
+                        alpha=0.9
+                    )
+
+                    self.axes.text(
+                        start_t,
+                        50,
+                        f"Sunrise {ob['sunrise']}",
+                        rotation=90,
+                        fontsize=8,
+                        color="red",
+                        va="bottom"
+                    )
+
+                # =====================================================
+                # 5. Generic WAIT / TECH BLOCK
+                # =====================================================
+                else:
+
+                    self.axes.axvspan(
+                        start_t,
+                        end_t,
+                        color="grey",
+                        alpha=0.25
+                    )
+
+                    self.axes.text(
+                        start_t,
+                        40,
+                        ob.get("name", "WAIT"),
+                        rotation=90,
+                        fontsize=8,
+                        color="black",
+                        va="bottom"
+                    )
+
+        # ---------------------------------------------------------
+        # kosmetyka wykresu
+        # ---------------------------------------------------------
+        self.axes.grid(True, alpha=0.25)
+        self.axes.set_title("Observation Plan")
+
+    def refresh2(self):
         self.axes.clear()
 
         self.oca = ephem.Observer()
