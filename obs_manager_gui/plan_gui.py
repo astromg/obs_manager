@@ -502,6 +502,7 @@ class PlotWindow(QWidget):
                     fontsize = 9
 
                 if ob.get("ra") and ob.get("dec"):
+
                     ra = ob["ra"]
                     dec = ob["dec"]
 
@@ -524,26 +525,50 @@ class PlotWindow(QWidget):
 
                         t += ephem.minute
 
-                    self.axes.plot(t_tab,alt_tab,color=color,linewidth=2)
-                    self.axes.text(start_t,93,ob.get("name", "target"),rotation=90,fontsize=fontsize,color=color,va="top",ha="left")
-
+                    self.axes.plot(t_tab, alt_tab, color=color, linewidth=2)
+                    self.axes.text(start_t, 93, ob.get("name", "target"), rotation=90, fontsize=fontsize, color=color,
+                                   va="top", ha="left")
 
                 elif ob.get("ut"):
-                    self.axes.axvline(x=start_t,color="green",linestyle="--",linewidth=1.5,alpha=0.8)
-                    self.axes.text(start_t,70,f"UT {ob['ut']}",rotation=90,fontsize=8,color="green",va="bottom")
+
+                    wait_to = start_t
+                    wait_from = self.t_now if self.t_now < wait_to else wait_to
+
+                    if wait_from < wait_to:
+                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="green", alpha=0.45)
+                        self.axes.text(wait_from, 10, f"WAIT UT {ob['ut']}", rotation=90, fontsize=8, color="green",
+                                       va="bottom")
 
                 elif ob.get("sunset"):
-                    self.axes.axvline(x=start_t,color="darkorange",linestyle="--",linewidth=1.5,alpha=0.9)
-                    self.axes.text(start_t,60,f"Sunset {ob['sunset']}",rotation=90,fontsize=8,color="darkorange",va="bottom")
+
+                    wait_to = start_t
+                    wait_from = self.t_now if self.t_now < wait_to else wait_to
+
+                    if wait_from < wait_to:
+                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="darkorange", alpha=0.45)
+                        self.axes.text(wait_from, 10, "WAIT SUNSET", rotation=90, fontsize=8, color="darkorange",
+                                       va="bottom")
 
                 elif ob.get("sunrise"):
-                    self.axes.axvline(x=start_t,color="red",linestyle="--",linewidth=1.5,alpha=0.9)
-                    self.axes.text(start_t,50,f"Sunrise {ob['sunrise']}", rotation=90,fontsize=8,color="red",va="bottom")
+
+                    wait_to = start_t
+                    wait_from = self.t_now if self.t_now < wait_to else wait_to
+
+                    if wait_from < wait_to:
+                        self.axes.fill_betweenx([0, 8], wait_from, wait_to, color="red", alpha=0.45)
+                        self.axes.text(wait_from, 10, "WAIT SUNRISE", rotation=90, fontsize=8, color="red", va="bottom")
+
+                elif ob.get("sec"):
+
+                    self.axes.fill_betweenx([0, 8], start_t, end_t, color="purple", alpha=0.35)
+                    self.axes.text(start_t, 10, f"WAIT {int(slotTime)}s", rotation=90, fontsize=8, color="purple",
+                                   va="bottom")
 
                 else:
-                    self.axes.axvspan(start_t,end_t,color="grey",alpha=0.25)
-                    self.axes.text(start_t,40,ob.get("name", "WAIT"),rotation=90,fontsize=8,color="black",va="bottom")
 
+                    self.axes.fill_betweenx([0, 8], start_t, end_t, color="grey", alpha=0.25)
+                    self.axes.text(start_t, 10, ob.get("name", "WAIT"), rotation=90, fontsize=8, color="black",
+                                   va="bottom")
 
         self.axes.grid(True, alpha=0.25)
         self.axes.set_title("Observation Plan")
