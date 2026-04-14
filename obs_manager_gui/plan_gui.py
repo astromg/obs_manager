@@ -2,10 +2,16 @@
 import datetime
 import ephem
 
-from PyQt6.QtWidgets import  QTableWidget, QAbstractItemView, QTableWidgetItem, QWidget,  QGridLayout, QPushButton, QFrame
+from PyQt6.QtWidgets import QTableWidget, QAbstractItemView, QTableWidgetItem, QWidget, QGridLayout, QPushButton, \
+    QFrame, QFileDialog
 from PyQt6.QtGui import QFont
 
 from astropy.time import Time
+
+
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from pyaraucaria.obs_plan.obs_plan_parser import ObsPlanParser
 from pyaraucaria.ob_validator import ObsValidator
@@ -17,10 +23,12 @@ class Plan_Gui(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.table_header = ["UT", "Name", "Alt", "Moon dist"]
+        self.plan_plot_window = None
+        self.table_header = ["UT", "Name", "Alt@UT", "Moon dist"]
         self.plan = []
         self.i = -1
 
+        self.obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
         self.mkUI()
 
     def add(self,ob):
@@ -45,36 +53,83 @@ class Plan_Gui(QWidget):
         moon = ephem.Moon()
         #sun = ephem.Sun()
 
-        obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
-        t = Time(obs_time, scale='utc')
+        self.obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
+        t = Time(self.obs_time, scale='utc')
 
         for data in self.plan:
+            oca.date = str(t)
+            data["ut"] = str(t)
+
             ob = data["ob"]
 
             if ob.get("ob_time", None):
                 slotTime = ob["ob_time"]
             elif ob.get("seq", None):
                 slotTime = seq_time(ob["seq"])
-            else:
-                slotTime = 10
+            elif ob.get("sec", None):
+                slotTime = ob["sec"]
+            else:                           # to nie przeszkodzi pozniej ut, sunrise, sunset
+                slotTime = 0
 
+            data["slotTime"] = slotTime
             t = t + ephem.second * slotTime
-            oca.date = str(t)
+
+            if ob.get("ut", None):
+                ut = ob["ut"]
+
+                ut_time = datetime.datetime.strptime(ut, "%Y-%m-%d %H:%M:%S")  # Przykład formatu
+                if ut_time < t:  # Jezeli ut mniejsze od aktualnego czasu,
+                    ut_time = ut_time + datetime.timedelta(days=1)  # Dodajemy 1 dzień
+
+                # Teraz ustawiamy czas oczekiwania na 'ut_time'
+                t = ut_time
 
 
-            s = ephem.FixedBody()
-            s._ra = ob["ra"]
-            s._dec = ob["dec"]
-            s.compute(oca)
-            moon.compute(oca)
 
-            alt = float(s.alt) * 180.0 / ephem.pi
-            az = float(s.az) * 180.0 / ephem.pi
-            moon_sep = float(ephem.separation(s, moon)) * 180.0 / ephem.pi
-            data["alt"] = alt
-            data["az"] = az
-            data["moon_sep"] = moon_sep
-            data["ut"] = str(t)
+            # elif ob.get("sunrise", None):
+            # elif ob.get("sunset", None):
+            #
+            # if "wait_ut" in self.plan[tel][i].keys():
+            #     if len(self.plan[tel][i]["wait_ut"]) > 0:
+            #         wait_ut = ephem.Date(str(ephem.Date(ob_time)).split()[0] + " " + self.plan[tel][i]["wait_ut"])
+            #         if ephem.Date(ob_time) < ephem.Date(wait_ut):
+            #             ob_time = wait_ut
+            # if "wait_sunset" in self.plan[tel][i].keys():
+            #     if len(self.plan[tel][i]["wait_sunset"]) > 0:
+            #         oca = ephem.Observer()
+            #         oca.date = ephem.now()
+            #         oca.lat = self.observatory[0]
+            #         oca.lon = self.observatory[1]
+            #         oca.elevation = float(self.observatory[2])
+            #         oca.horizon = self.plan[tel][i]["wait_sunset"]
+            #         wait_ut = oca.next_setting(ephem.Sun(), use_center=True)
+            #         if ob_time < wait_ut:
+            #             ob_time = wait_ut
+            # if "wait_sunrise" in self.plan[tel][i].keys():
+            #     if len(self.plan[tel][i]["wait_sunrise"]) > 0:
+            #         oca = ephem.Observer()
+            #         oca.date = ephem.now()
+            #         oca.lat = self.observatory[0]
+            #         oca.lon = self.observatory[1]
+            #         oca.elevation = float(self.observatory[2])
+            #         oca.horizon = self.plan[tel][i]["wait_sunrise"]
+            #         wait_ut = oca.next_rising(ephem.Sun(), use_center=True)
+            #         if ob_time < wait_ut:
+            #             ob_time = wait_ut
+
+
+            if ob.get("ra",None) and ob.get("dec",None):
+                s = ephem.FixedBody()
+                s._ra = ob["ra"]
+                s._dec = ob["dec"]
+                s.compute(oca)
+                moon.compute(oca)
+                alt = float(s.alt) * 180.0 / ephem.pi
+                az = float(s.az) * 180.0 / ephem.pi
+                moon_sep = float(ephem.separation(s, moon)) * 180.0 / ephem.pi
+                data["alt"] = alt
+                data["az"] = az
+                data["moon_sep"] = moon_sep
 
 
     def update_table(self):
@@ -99,33 +154,68 @@ class Plan_Gui(QWidget):
 
                 for j,key in enumerate(self.table_header):
                     if key == "Name":
-                        txt = ob["name"]
+                        txt = ""
+                        if ob["command_name"] == "OBJECT":
+                            if ob.get("name",None):
+                                txt = ob["name"]
+                        elif ob["command_name"] == "FOCUS":
+                            if ob.get("name",None):
+                                txt = ob["command_name"] + " " + ob["name"]
+                        elif ob["command_name"] == "SKYFLAT":
+                            if ob.get("name",None):
+                                txt = ob["command_name"] + " " + ob["name"]
+                        elif ob["command_name"] == "DOMEFLAT":
+                            txt = ob["command_name"]
+                        elif ob["command_name"] == "STOP":
+                            txt = ob["command_name"]
+                        elif ob["command_name"] == "WAIT":
+                            txt = ""
+                            for k in ["sec", "ut", "sunrise", "sunset"]:
+                                if ob.get(k,None):
+                                    txt = txt + f'{k}={ob[k]}'
+                        elif ob["command_name"] == "ZERO":
+                            txt = ob["command_name"]
+                        elif ob["command_name"] == "DARK":
+                            txt = ob["command_name"]
+
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
+
                     elif key == "UT":
-                        txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
+                        txt = ""
+                        if ob.get("ut",None):
+                            txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
-                    elif key == "Alt":
-                        txt = f'{data["alt"]:.0f}'
+
+                    elif key == "Alt@UT":
+                        txt = ""
+                        if ob.get("alt",None):
+                            txt = f'{data["alt"]:.0f}'
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
+
                     elif key == "Moon dist":
-                        txt = f'{data["moon_sep"]:.0f}'
+                        txt = ""
+                        if ob.get("moon_sep",None):
+                            txt = f'{data["moon_sep"]:.0f}'
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
+
                     else:
                         txt = "--"
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
-                    # ["UT", "Name", "Alt", "Moon dist"]
 
 
         self.table_t.resizeColumnsToContents()
 
         if self.i is not None and self.i < self.table_t.rowCount():
             self.table_t.selectRow(self.i)
+
+        if self.plan_plot_window:
+            self.plan_plot_window.refresh()
 
         # max_column_width = 100  # Maksymalna szerokość kolumny
         # for col in range(self.table_t.columnCount()):
@@ -197,6 +287,49 @@ class Plan_Gui(QWidget):
         self.i += 1
         self.update_table()
 
+    def plot_plan(self):
+        self.plan_plot_window = PlotWindow(self)
+
+    def pocisniecie_edit(self):
+        pass
+
+    def pocisniecie_copy(self):
+        if len(self.plan) == 0:
+            return
+        if self.i < 0:
+            return
+        self.add(self.plan[self.i]["ob"])
+        self.update_table()
+
+    def pocisniecie_load(self):
+        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.parent.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
+        if file_path:
+            try:
+                with open(file_path, 'r') as plik:
+                    for line in plik:
+                        ob_tmp = ObsPlanParser.convert_from_string(line)
+                        ob = ObsValidator.convert_to_obdict(ob_tmp)
+                        if ob:
+                            self.add(ob)
+            except Exception as e:
+                print(f"Error loading Plan file {file_path}: {e}")
+        self.update_table()
+
+
+    def pocisniecie_save(self):
+        txt = ""
+        for data in self.plan:
+            ob = data["ob"]
+            txt = txt + ObsValidator.convert_from_obdict(ob) + "\n"
+
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.parent.cfg["master_file"], "Text Files (*.txt);;All Files (*)")
+        if file_path:
+            try:
+                with open(file_path, "w", encoding="utf-8") as file:
+                    file.write(txt)
+                    print(f'Plan saved to {file_path}')
+            except Exception as e:
+                print(f"Error saving Plan file {file_path}: {e}")
 
     def mkUI(self):
         self.setWindowTitle("Plan")
@@ -226,15 +359,12 @@ class Plan_Gui(QWidget):
         self.grid.addWidget(self.line_l, w, 0, 1, 5)
 
         w = w + 1
-        # self.next_p = QPushButton('NEXT \u2192')
         # self.addStop_p = QPushButton("STOP \u2B23")
         # self.addBell_p = QPushButton('BELL \u266A')
-        # self.skip_p = QPushButton('SKIP \u23ED')
+        # self.addWait_p = QPushButton('WAIT \u266A')
         #
-        # self.grid.addWidget(self.next_p, w, 0)
         # self.grid.addWidget(self.addStop_p, w, 2)
         # self.grid.addWidget(self.addBell_p, w, 3)
-        # self.grid.addWidget(self.skip_p, w, 4)
 
         w = w + 1
         self.line_l = QFrame()
@@ -243,8 +373,13 @@ class Plan_Gui(QWidget):
         self.grid.addWidget(self.line_l, w, 0, 1, 5)
 
         w = w + 1
+        self.edit_p = QPushButton('Edit OB')
+        self.edit_p.clicked.connect(self.pocisniecie_edit)
         self.copy_p = QPushButton('Copy OB')
-        self.grid.addWidget(self.copy_p, w, 2)
+        self.copy_p.clicked.connect(self.pocisniecie_copy)
+
+        self.grid.addWidget(self.edit_p, w, 4)
+        self.grid.addWidget(self.copy_p, w, 0)
 
         w = w + 1
         self.line_l = QFrame()
@@ -273,9 +408,12 @@ class Plan_Gui(QWidget):
         self.grid.addWidget(self.last_p, w, 4)
 
         w = w + 1
+        self.load_p = QPushButton('Load Plan')
+        self.load_p.clicked.connect(self.pocisniecie_load)
         self.save_p = QPushButton('Save Plan')
+        self.save_p.clicked.connect(self.pocisniecie_save)
 
-
+        self.grid.addWidget(self.load_p, w, 0, 1, 2)
         self.grid.addWidget(self.save_p, w, 3, 1, 2)
 
 
@@ -286,7 +424,7 @@ class Plan_Gui(QWidget):
         # self.plan_t.cellClicked.connect(self.pocisniecie_tabelki)
         # self.plan_t.horizontalHeader().sectionClicked.connect(self.pocisniecie_headera)
         #
-        # self.plotPlan_p.clicked.connect(self.plot_plan)
+        self.plotPlan_p.clicked.connect(self.plot_plan)
         # self.next_p.clicked.connect(self.setNext)
         # self.skip_p.clicked.connect(self.setSkip)
         self.up_p.clicked.connect(self.pocisniecie_up)
@@ -296,9 +434,221 @@ class Plan_Gui(QWidget):
         self.first_p.clicked.connect(self.pocisniecie_first)
         self.last_p.clicked.connect(self.pocisniecie_last)
         #self.swap_p.clicked.connect(self.pocisniecie_swap)
-        # self.copy_p.clicked.connect(self.pocisniecie_copy)
         # self.addStop_p.clicked.connect(self.pocisniecie_addStop)
         # self.addBell_p.clicked.connect(self.pocisniecie_addBell)
 
         self.setLayout(self.grid)
         self.table_t.setColumnWidth(0, 30)
+
+
+
+# #############################################
+# ######### OKNO WYKRESU (PLOT PLAN) ##########
+# #############################################
+
+class PlotWindow(QWidget):
+    def __init__(self, parent):
+        super(PlotWindow, self).__init__()
+        self.parent = parent
+        self.obs_time = self.parent.obs_time
+
+        self.setStyleSheet("font-size: 11pt;")
+        #self.set_initial_geometry(100,100,1800,600)
+        self.setMinimumSize(1800,600)
+        self.mkUI()
+        self.refresh()
+        self.close_p.clicked.connect(lambda: self.close())
+
+    def refresh(self):
+        self.axes.clear()
+
+        self.oca = ephem.Observer()
+        self.oca.lon = str(self.parent.parent.cfg["obs_longitude"])
+        self.oca.lat = str(self.parent.parent.cfg["obs_latitude"])
+        self.oca.elev = float(self.parent.parent.cfg["obs_elevation"])
+        self.oca.horizon = "0"
+
+        self.obs_time = self.parent.obs_time
+        self.oca.date = str(Time(self.obs_time, scale='utc'))
+        self.t_now = self.oca.date
+
+        # liczenie wschodu slonca i zachodu
+        t1 = self.oca.next_setting(ephem.Sun(), use_center=True) - self.oca.date
+        t2 = self.oca.next_rising(ephem.Sun(), use_center=True) - self.oca.date
+        if t1 < t2 :
+            self.t0 = self.oca.next_setting(ephem.Sun(),use_center=True)
+        else:
+            self.t0 = self.oca.previous_setting(ephem.Sun(),use_center=True)
+        self.oca.date = self.t0
+        self.t_end = self.oca.next_rising(ephem.Sun(),use_center=True)
+
+        # liczenie zmierzchu
+        self.oca.horizon = "-18"
+        self.t0_dusk = self.oca.next_setting(ephem.Sun(),use_center=True)
+        self.t_end_dusk = self.oca.next_rising(ephem.Sun(),use_center=True)
+
+
+        # Rysowanie
+
+        if len(self.parent.plan)>0:
+            color = ["c", "m"]
+            self.t = self.t_now
+
+            j=0
+            for data in self.parent.plan:
+                ob = data["ob"]
+                fontsize = 9
+                if j==len(color): j=0
+        #         tmp_ok = False
+        #         if self.parent.current_i > -1 and i >= self.parent.current_i: tmp_ok = True
+        #         if i >= self.parent.next_i: tmp_ok = True
+        #         if 'skip' in self.parent.plan[i].keys():
+        #             if self.parent.plan[i]['skip']:
+        #                 tmp_ok = False
+        #         if 'skip_alt' in self.parent.plan[i].keys():
+        #             if self.parent.plan[i]['skip_alt']:
+        #                 tmp_ok = False
+        #         if 'ok' in self.parent.plan[i].keys():
+        #             if not self.parent.plan[i]['ok']:
+        #                 tmp_ok = False
+        #
+        #         if tmp_ok:
+        #             if 'type' in self.parent.plan[i].keys():
+        #                 if self.parent.plan[i]["type"] == "STOP":
+        #                     self.axes.axvline(x=self.t, color="red",alpha=0.5)
+        #                     self.axes.text(self.t,2,"STOP",rotation=90,fontsize=fontsize)
+        #
+        #             if "wait" in self.parent.plan[i].keys():
+        #                 if len(self.parent.plan[i]["wait"]) > 0:
+        #                     slotTime = float(self.parent.plan[i]["wait"])
+        #                     self.axes.fill_betweenx([0, 2], self.t, self.t+ephem.second*slotTime, color="r", alpha=0.5)
+        #                     self.axes.text(self.t, 3, f"WAIT {int(slotTime)}s", rotation=90, fontsize=fontsize)
+        #                     self.t = self.t + ephem.second * slotTime
+        #
+        #
+        #             if "wait_ut" in self.parent.plan[i].keys():
+        #                 if len(self.parent.plan[i]["wait_ut"]) > 0:
+        #                     wait_ut = ephem.Date(str(ephem.Date(self.t)).split()[0] + " " + self.parent.plan[i]["wait_ut"])
+        #                     if self.t < wait_ut:
+        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
+        #                                                 alpha=0.5)
+        #                         self.axes.text(self.t, 3, f"WAIT UT {wait_ut}", rotation=90, fontsize=fontsize)
+        #                         self.t = wait_ut
+        #
+        #             if "wait_sunset" in self.parent.plan[i].keys():
+        #                 if len(self.parent.plan[i]["wait_sunset"]) > 0:
+        #                     self.oca.horizon = self.parent.plan[i]["wait_sunset"]
+        #                     wait_ut = self.oca.next_setting(ephem.Sun(), use_center=True)
+        #                     if self.t < wait_ut:
+        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
+        #                                                 alpha=0.5)
+        #                         self.axes.text(self.t, 3, f"WAIT SUNSET {wait_ut}", rotation=90, fontsize=fontsize)
+        #                         self.t = wait_ut
+        #
+        #             if "wait_sunrise" in self.parent.plan[i].keys():
+        #                 if len(self.parent.plan[i]["wait_sunrise"]) > 0:
+        #                     self.oca.horizon = self.parent.plan[i]["wait_sunrise"]
+        #                     wait_ut = self.oca.next_rising(ephem.Sun(), use_center=True)
+        #                     if self.t < wait_ut:
+        #                         self.axes.fill_betweenx([0, 2], self.t, wait_ut, color="r",
+        #                                                 alpha=0.5)
+        #                         self.axes.text(self.t, 3, f"WAIT SUNRISE {wait_ut}", rotation=90, fontsize=fontsize)
+        #                         self.t = wait_ut
+        #
+
+                slotTime = data["slotTime"]
+
+                if slotTime < 60:
+                    fontsize = 2
+                if slotTime < 60 * 5:
+                    fontsize = 5
+                if slotTime < 60 * 10:
+                    fontsize = 7
+                else:
+                    fontsize = 9
+
+                if "ra" in ob.keys():
+                    ra = ob["ra"]
+                    dec = ob["dec"]
+                    t_tab = []
+                    alt_tab = []
+
+                    t = self.t
+                    while t <= self.t + ephem.second * slotTime:
+                        self.oca.date = t
+                        star = ephem.FixedBody()
+                        star._ra = str(ra)
+                        star._dec = str(dec)
+                        star.compute(self.oca)
+
+                        alt = float(star.alt) * 180.0 / ephem.pi
+                        az = float(star.az) * 180.0 / ephem.pi
+
+                        t_tab.append(t)
+                        alt_tab.append(alt)
+
+                        t = t + ephem.minute
+
+                    self.axes.plot(t_tab,alt_tab,color=color[j])
+                    self.axes.text(self.t, 93, f"{ob['name']}", color=color[j], rotation=90, fontsize=fontsize)
+                    j=j+1
+
+                self.t = self.t + ephem.second * slotTime
+
+
+        self.axes.set_ylim(0, 90)
+        #self.axes.set_xlim(self.t0-2*ephem.hour,self.t_end+2*ephem.hour)
+        self.axes.fill_betweenx([0, 35], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
+        self.axes.fill_betweenx([80, 90], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
+        self.axes.fill_betweenx([0, 90], self.t0, self.t0_dusk, color="yellow", alpha=0.1)
+        self.axes.fill_betweenx([0, 90], self.t_end_dusk, self.t_end, color="yellow", alpha=0.1)
+        self.axes.axvline(x=self.t_now, color="blue")
+        txt = str(self.t_now).split()[1].split(":")[0] + ":" + str(self.t_now).split()[1].split(":")[1]
+        self.axes.text(self.t_now, 82, f"{txt}", rotation=90, fontsize=12)
+
+        xtics = [self.t0, self.t0_dusk, self.t_end_dusk, self.t_end]
+        t =  ephem.Date(self.t0_dusk+30*ephem.minute)
+        while t < ephem.Date(self.t_end_dusk-30*ephem.minute):
+            t = ephem.Date(t) + ephem.hour
+            h = str(ephem.Date(t)).split()
+            xtics.append( ephem.Date(h[0]+" "+h[1].split(":")[0]+":00:00"))
+        xtics_labels = [str(x).split()[1].split(":")[0]+":"+str(x).split()[1].split(":")[1] for x in xtics]
+        self.axes.set_xticks(xtics)
+        self.axes.set_xticklabels(xtics_labels,rotation=45,minor=False)
+
+        self.axes.set_yticks([0, 35, 80, 90])
+        self.axes.set_yticklabels(["0 deg", "35 deg", "80 deg", "90 deg"])
+
+        #self.axes.set_ylabel("altitude")
+        #self.axes.set_xlabel("UT")
+        self.fig.subplots_adjust(bottom=0.12,top=0.8,left=0.08,right=0.98)
+        #self.fig.tight_layout()
+
+        self.canvas.draw()
+        self.show()
+
+
+
+
+
+    def mkUI(self):
+        grid = QGridLayout()
+        self.fig = Figure((1.0, 1.0), linewidth=-1, dpi=100)
+        self.canvas = FigureCanvas(self.fig)
+        self.axes = self.fig.add_subplot(111)
+        grid.addWidget(self.canvas,0,0,1,2)
+
+        self.toolbar = NavigationToolbar(self.canvas,self)
+        grid.addWidget(self.toolbar, 1, 0, 1, 2)
+
+        self.close_p = QPushButton('Close')
+        grid.addWidget(self.close_p, 2, 1)
+
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 0)
+        grid.setRowStretch(0, 1)
+        grid.setRowStretch(1, 0)
+        grid.setRowStretch(2, 0)
+
+        self.setLayout(grid)
+        self.show()

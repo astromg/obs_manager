@@ -47,6 +47,7 @@ warnings.simplefilter('ignore', category=AstropyWarning)
 class OM_Gui(QWidget):
     def __init__(self, args, parent=None):
         super().__init__()
+        self.plan_gui = None
 
         self.inactive_statuses = ["deactivated","inactive"]
 
@@ -350,6 +351,11 @@ class OM_Gui(QWidget):
         except AttributeError:
             pass
 
+        if self.plan_gui:
+            self.plan_gui.update_table()
+
+
+
     def date_changed(self):
         self.update_almanac()
         try:
@@ -365,9 +371,13 @@ class OM_Gui(QWidget):
         except AttributeError:
             pass
 
+        if self.plan_gui:
+            self.plan_gui.update_table()
+
+
     def update_almanac(self):
-        obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
-        time = Time(obs_time, scale='utc')
+        self.obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
+        time = Time(self.obs_time, scale='utc')
         self.almanac = sun_moon_ephem(time, self.cfg["obs_latitude"], self.cfg["obs_longitude"], self.cfg["obs_elevation"], horizon=0*units.deg)
         self.almanac["julian_date"] = time.jd
 
