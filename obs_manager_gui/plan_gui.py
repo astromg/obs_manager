@@ -78,7 +78,7 @@ class Plan_Gui(QWidget):
             elif ob.get("seq", None):
                 slotTime = seq_time(ob["seq"])
             elif ob.get("sec", None):
-                slotTime = ob["sec"]
+                slotTime = float(ob["sec"])
             else:                           # to nie przeszkodzi pozniej ut, sunrise, sunset
                 slotTime = 0
 
@@ -87,12 +87,15 @@ class Plan_Gui(QWidget):
 
             if ob.get("ut", None):
                 ut = ob["ut"]
+                now = t.datetime
                 ut_time = datetime.datetime.strptime(ut, "%H:%M:%S").time()
                 ut_dt = datetime.datetime.combine(t.datetime.date(), ut_time)
-                if ut_dt < t.datetime:
-                    ut_dt = ut_dt + datetime.timedelta(days=1)
-                t = Time(ut_dt, scale='utc')
 
+                if now.hour >= 12 and ut_time.hour < 12:
+                    ut_dt = ut_dt + datetime.timedelta(days=1)
+
+                if now < ut_dt:
+                    t = Time(ut_dt, scale='utc')
 
             elif ob.get("sunset", None):
                 oca.horizon = ob["sunset"]
@@ -163,6 +166,7 @@ class Plan_Gui(QWidget):
                         txt = ""
                         if data.get("ut",None):
                             txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
+                            txt = data["ut"]
                         item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
@@ -437,14 +441,41 @@ class PlotWindow(QWidget):
         self.refresh()
         self.close_p.clicked.connect(lambda: self.close())
 
-    def refreash(self):
+    def refresh(self):
+        self.axes.clear()
+
+        self.oca = ephem.Observer()
+        self.oca.lon = str(self.parent.parent.cfg["obs_longitude"])
+        self.oca.lat = str(self.parent.parent.cfg["obs_latitude"])
+        self.oca.elev = float(self.parent.parent.cfg["obs_elevation"])
+        self.oca.horizon = "0"
+
+        self.obs_time = self.parent.obs_time
+        self.oca.date = str(Time(self.obs_time, scale='utc'))
+        self.t_now = self.oca.date
+
+        # liczenie wschodu slonca i zachodu
+        t1 = self.oca.next_setting(ephem.Sun(), use_center=True) - self.oca.date
+        t2 = self.oca.next_rising(ephem.Sun(), use_center=True) - self.oca.date
+        if t1 < t2 :
+            self.t0 = self.oca.next_setting(ephem.Sun(),use_center=True)
+        else:
+            self.t0 = self.oca.previous_setting(ephem.Sun(),use_center=True)
+        self.oca.date = self.t0
+        self.t_end = self.oca.next_rising(ephem.Sun(),use_center=True)
+
+        # liczenie zmierzchu
+        self.oca.horizon = "-18"
+        self.t0_dusk = self.oca.next_setting(ephem.Sun(),use_center=True)
+        self.t_end_dusk = self.oca.next_rising(ephem.Sun(),use_center=True)
+
         # ---------------------------------------------------------
         # Rysowanie planu obserwacji (obsługa RA/DEC + UT + sunrise/sunset)
         # ---------------------------------------------------------
 
         if len(self.parent.plan) > 0:
 
-            colors = ["c", "m", "b", "g"]
+            colors = ["c", "m"]
             j = 0
 
             for data in self.parent.plan:
@@ -452,10 +483,7 @@ class PlotWindow(QWidget):
                 ob = data["ob"]
                 slotTime = data.get("slotTime", 0)
 
-                # jeżeli brak czasu trwania i brak znacznika - pomijamy
-                if slotTime <= 0 and not (
-                        ob.get("ut") or ob.get("sunset") or ob.get("sunrise")
-                ):
+                if slotTime <= 0 and not (ob.get("ut") or ob.get("sunset") or ob.get("sunrise")):
                     continue
 
                 start_t = ephem.Date(data["ut"])
@@ -464,23 +492,16 @@ class PlotWindow(QWidget):
                 color = colors[j % len(colors)]
                 j += 1
 
-                # -------------------------
-                # dobór fontsize
-                # -------------------------
                 if slotTime < 60:
                     fontsize = 2
-                elif slotTime < 300:
+                elif slotTime < 5 * 60:
                     fontsize = 5
-                elif slotTime < 600:
+                elif slotTime < 10 * 60:
                     fontsize = 7
                 else:
                     fontsize = 9
 
-                # =====================================================
-                # 1. Normalny target z RA / DEC
-                # =====================================================
                 if ob.get("ra") and ob.get("dec"):
-
                     ra = ob["ra"]
                     dec = ob["dec"]
 
@@ -503,128 +524,60 @@ class PlotWindow(QWidget):
 
                         t += ephem.minute
 
-                    self.axes.plot(
-                        t_tab,
-                        alt_tab,
-                        color=color,
-                        linewidth=2
-                    )
+                    self.axes.plot(t_tab,alt_tab,color=color,linewidth=2)
+                    self.axes.text(start_t,93,ob.get("name", "target"),rotation=90,fontsize=fontsize,color=color,va="top",ha="left")
 
-                    self.axes.text(
-                        start_t,
-                        93,
-                        ob.get("name", "target"),
-                        rotation=90,
-                        fontsize=fontsize,
-                        color=color,
-                        va="top",
-                        ha="left"
-                    )
 
-                    # delikatne tło slotu
-                    self.axes.axvspan(
-                        start_t,
-                        end_t,
-                        color=color,
-                        alpha=0.05
-                    )
-
-                # =====================================================
-                # 2. Marker UT
-                # =====================================================
                 elif ob.get("ut"):
+                    self.axes.axvline(x=start_t,color="green",linestyle="--",linewidth=1.5,alpha=0.8)
+                    self.axes.text(start_t,70,f"UT {ob['ut']}",rotation=90,fontsize=8,color="green",va="bottom")
 
-                    self.axes.axvline(
-                        x=start_t,
-                        color="green",
-                        linestyle="--",
-                        linewidth=1.5,
-                        alpha=0.8
-                    )
-
-                    self.axes.text(
-                        start_t,
-                        70,
-                        f"UT {ob['ut']}",
-                        rotation=90,
-                        fontsize=8,
-                        color="green",
-                        va="bottom"
-                    )
-
-                # =====================================================
-                # 3. Marker SUNSET
-                # =====================================================
                 elif ob.get("sunset"):
+                    self.axes.axvline(x=start_t,color="darkorange",linestyle="--",linewidth=1.5,alpha=0.9)
+                    self.axes.text(start_t,60,f"Sunset {ob['sunset']}",rotation=90,fontsize=8,color="darkorange",va="bottom")
 
-                    self.axes.axvline(
-                        x=start_t,
-                        color="darkorange",
-                        linestyle="--",
-                        linewidth=1.5,
-                        alpha=0.9
-                    )
-
-                    self.axes.text(
-                        start_t,
-                        60,
-                        f"Sunset {ob['sunset']}",
-                        rotation=90,
-                        fontsize=8,
-                        color="darkorange",
-                        va="bottom"
-                    )
-
-                # =====================================================
-                # 4. Marker SUNRISE
-                # =====================================================
                 elif ob.get("sunrise"):
+                    self.axes.axvline(x=start_t,color="red",linestyle="--",linewidth=1.5,alpha=0.9)
+                    self.axes.text(start_t,50,f"Sunrise {ob['sunrise']}", rotation=90,fontsize=8,color="red",va="bottom")
 
-                    self.axes.axvline(
-                        x=start_t,
-                        color="red",
-                        linestyle="--",
-                        linewidth=1.5,
-                        alpha=0.9
-                    )
-
-                    self.axes.text(
-                        start_t,
-                        50,
-                        f"Sunrise {ob['sunrise']}",
-                        rotation=90,
-                        fontsize=8,
-                        color="red",
-                        va="bottom"
-                    )
-
-                # =====================================================
-                # 5. Generic WAIT / TECH BLOCK
-                # =====================================================
                 else:
+                    self.axes.axvspan(start_t,end_t,color="grey",alpha=0.25)
+                    self.axes.text(start_t,40,ob.get("name", "WAIT"),rotation=90,fontsize=8,color="black",va="bottom")
 
-                    self.axes.axvspan(
-                        start_t,
-                        end_t,
-                        color="grey",
-                        alpha=0.25
-                    )
 
-                    self.axes.text(
-                        start_t,
-                        40,
-                        ob.get("name", "WAIT"),
-                        rotation=90,
-                        fontsize=8,
-                        color="black",
-                        va="bottom"
-                    )
-
-        # ---------------------------------------------------------
-        # kosmetyka wykresu
-        # ---------------------------------------------------------
         self.axes.grid(True, alpha=0.25)
         self.axes.set_title("Observation Plan")
+        self.axes.set_ylim(0, 90)
+        #self.axes.set_xlim(self.t0-2*ephem.hour,self.t_end+2*ephem.hour)
+        self.axes.fill_betweenx([0, 35], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
+        self.axes.fill_betweenx([80, 90], self.t0_dusk, self.t_end_dusk, color="grey", alpha=0.1)
+        self.axes.fill_betweenx([0, 90], self.t0, self.t0_dusk, color="yellow", alpha=0.1)
+        self.axes.fill_betweenx([0, 90], self.t_end_dusk, self.t_end, color="yellow", alpha=0.1)
+        self.axes.axvline(x=self.t_now, color="blue")
+        txt = str(self.t_now).split()[1].split(":")[0] + ":" + str(self.t_now).split()[1].split(":")[1]
+        self.axes.text(self.t_now, 82, f"{txt}", rotation=90, fontsize=12)
+
+        xtics = [self.t0, self.t0_dusk, self.t_end_dusk, self.t_end]
+        t =  ephem.Date(self.t0_dusk+30*ephem.minute)
+        while t < ephem.Date(self.t_end_dusk-30*ephem.minute):
+            t = ephem.Date(t) + ephem.hour
+            h = str(ephem.Date(t)).split()
+            xtics.append( ephem.Date(h[0]+" "+h[1].split(":")[0]+":00:00"))
+        xtics_labels = [str(x).split()[1].split(":")[0]+":"+str(x).split()[1].split(":")[1] for x in xtics]
+        self.axes.set_xticks(xtics)
+        self.axes.set_xticklabels(xtics_labels,rotation=45,minor=False)
+
+        self.axes.set_yticks([0, 35, 80, 90])
+        self.axes.set_yticklabels(["0 deg", "35 deg", "80 deg", "90 deg"])
+
+        #self.axes.set_ylabel("altitude")
+        #self.axes.set_xlabel("UT")
+        self.fig.subplots_adjust(bottom=0.12,top=0.8,left=0.08,right=0.98)
+        #self.fig.tight_layout()
+
+        self.canvas.draw()
+        self.show()
+
 
     def refresh2(self):
         self.axes.clear()
