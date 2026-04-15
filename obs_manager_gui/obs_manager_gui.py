@@ -1364,7 +1364,7 @@ class SkyWindow(QWidget):
                         self.parent.update_selection()
 
 # ######################
-#        TPG
+#     TPG WINDOW
 # ######################
 
 
@@ -1374,12 +1374,9 @@ class TPGWindow(QWidget):
         self.parent = parent
 
         self.setStyleSheet("font-size: 11pt;")
-        self.setMinimumSize(100,200)
+        s#elf.setMinimumSize(100,200)
         self.mkUI()
 
-
-        # DUPA
-        #     p = tpg(args.tel,args.date,wind=args.wind,loud=args.loud,seed=args.seed,done_uobi=[])
 
     def load(self):
         tel = self.parent.tel_s.currentText()
@@ -1523,24 +1520,6 @@ class TPGWindow(QWidget):
         self.log_e.clear()
         self.log_e.setText(self.p.msg)
 
-        # wypisuje log
-        # vis_list = ["h_min", "h_max", "min_moon_dist", "max_moon_phase", "wind","cycle", "t_start", "t_end",
-        #             "ph_start","ph_end","ph_mk","all"]
-        # txt = "name    "+"    ".join(vis_list) + "\n"
-        # for n,ob in enumerate(self.p.ob):
-        #     txt = txt + self.p.ob[n]["name"]
-        #     for k in vis_list:
-        #         if k in self.p.ob[n]["visibility"].keys():
-        #             vis = numpy.array(self.p.ob[n]["visibility"][k])
-        #             minutes = len(vis[vis])
-        #             txt = txt+ "    "+str(minutes)
-        #         else:
-        #             txt = txt + "    --"
-        #
-        #     txt = txt + "\n"
-        #
-        # print(txt)
-
         self.p.export()  # export plan
         self.parent.update_table()
 
@@ -1548,56 +1527,113 @@ class TPGWindow(QWidget):
     def mkUI(self):
         grid = QGridLayout()
 
-        self.log_e = QTextEdit()
-        grid.addWidget(self.log_e, 0, 0,8,1)
+        # przyciski po lewej stronie
+        w = 0
+        self.sunset_start_c = QCheckBox("Start at SUNSET")
+        self.sunset_start_c.setChecked(True)
+        self.sunset_start_e = QTextEdit()
 
+        grid.addWidget(self.sunset_start_c, w, 0)
+        grid.addWidget(self.sunset_start_e, w, 1)
+
+        w = w + 1
+        self.avoid_wind_c = QCheckBox("Avoid wind direction")
+        self.avoid_wind_c.setChecked(False)
+        self.avoid_wind_e = QTextEdit()
+
+        grid.addWidget(self.avoid_wind_c, w, 0)
+        grid.addWidget(self.avoid_wind_e, w, 1)
+
+        w = w + 1
+        self.fwhm_c = QCheckBox("Limit for FWHM")
+        self.fwhm_c.setChecked(False)
+        self.fwhm_e = QTextEdit()
+
+        grid.addWidget(self.fwhm_c, w, 0)
+        grid.addWidget(self.fwhm_e, w, 1)
+
+        # Tutaj reszta, czyli fwhm, seed
+        # potem sam checkbox do save file (True), start makro (False)m end makro (False)
+
+        # tutaj pionowa linia oddzielanjaca przyciski po prawej stronie
+        w = 0
+        self.line_l = QFrame()
+        self.line_l.setFrameShape(QFrame.Shape.VLine)
+        self.line_l.setFrameShadow(QFrame.Shadow.Raised)
+        self.grid.addWidget(self.line_l, w, 2, 9, 1)
+
+        # przyciski po prawej stronie
+
+        w = 0
         self.load_p = QPushButton('Load data / Init')
         self.load_p.clicked.connect(self.load)
-        grid.addWidget(self.load_p, 0, 1)
+        grid.addWidget(self.load_p, w, 3)
 
+        w = w + 1
         self.calc_p = QPushButton('Calc Object')
         self.calc_p.clicked.connect(self.calc_ob)
-        grid.addWidget(self.calc_p, 1, 1)
+        grid.addWidget(self.calc_p, w, 3)
 
+        w = w + 1
         self.vis_p = QPushButton('Visibility')
         self.vis_p.clicked.connect(self.mask_vis)
-        grid.addWidget(self.vis_p, 2, 1)
+        grid.addWidget(self.vis_p, w, 3)
 
+        # dalej trzeba poprawic umieszczanie w grid
+        w = w + 1
         self.moon_p = QPushButton('Moon')
         self.moon_p.clicked.connect(self.mask_moon)
         grid.addWidget(self.moon_p, 3, 1)
 
+        w = w + 1
         self.wind_p = QPushButton('Wind')
         self.wind_p.clicked.connect(self.mask_wind)
         grid.addWidget(self.wind_p, 4, 1)
 
+        w = w + 1
         self.twilight_p = QPushButton('Mask Twilight Delay')
         self.twilight_p.clicked.connect(self.mask_twilight)
         grid.addWidget(self.twilight_p, 5, 1)
 
+        w = w + 1
         self.cycle_p = QPushButton('Cycle')
         self.cycle_p.clicked.connect(self.mask_cycle)
         grid.addWidget(self.cycle_p, 6, 1)
 
+        w = w + 1
         self.time_p = QPushButton('Time')
         self.time_p.clicked.connect(self.mask_startend)
         grid.addWidget(self.time_p, 7, 1)
 
+        w = w + 1
         self.phlim_p = QPushButton('Phase limits')
         self.phlim_p.clicked.connect(self.mask_phstartend)
         grid.addWidget(self.phlim_p, 8, 1)
 
+        w = w + 1
         self.phmk_p = QPushButton('Phase density')
         self.phmk_p.clicked.connect(self.mask_phase)
         grid.addWidget(self.phmk_p, 9, 1)
 
-        self.tpg_p = QPushButton('run tpg')
+        w = w + 1
+        self.tpg_p = QPushButton('run TPG')
         self.tpg_p.clicked.connect(self.run_tpg)
-        grid.addWidget(self.tpg_p, 10, 1)
+        grid.addWidget(self.tpg_p, w, 0, 1,4)
 
+        w = w + 1
+        self.log_e = QTextEdit()
+        self.log_e.setEditable(False)
+        grid.addWidget(self.log_e, w, 0, 1, 4)
+        # w tym oknie chcial bym aby wyswietlaly sie komunikaty po kazdym etapie uruchamiania tpg, np:
+        # "making timeline <span style='color: green;'>\u2714</span>"
+        # f"plan start: <span style='color: green; font-weight: bold;'> {p.start_time}  </span>"
+        # "calculating visibilities <span style='color: green;'>\u2714</span>"
+
+
+        w = w + 1
         self.close_p = QPushButton('Close')
         self.close_p.clicked.connect(lambda: self.close())
-        grid.addWidget(self.close_p, 11, 0)
+        grid.addWidget(self.close_p, w, 2, 1, 2)
 
         self.setLayout(grid)
         self.show()

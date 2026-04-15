@@ -4,7 +4,7 @@ import ephem
 
 from PyQt6.QtWidgets import QTableWidget, QAbstractItemView, QTableWidgetItem, QWidget, QGridLayout, QPushButton, \
     QFrame, QFileDialog
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QColor
 
 from astropy.time import Time
 
@@ -139,31 +139,43 @@ class Plan_Gui(QWidget):
                         if ob["command_name"] == "OBJECT":
                             if ob.get("name",None):
                                 txt = ob["name"]
+                                item = QTableWidgetItem(txt)
                         elif ob["command_name"] == "FOCUS":
                             if ob.get("name",None):
                                 txt = ob["command_name"] + " " + ob["name"]
+                                item = QTableWidgetItem(txt)
                         elif ob["command_name"] == "SKYFLAT":
                             if ob.get("name",None):
                                 txt = ob["command_name"] + " " + ob["name"]
+                                item = QTableWidgetItem(txt)
                         elif ob["command_name"] == "DOMEFLAT":
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
                         elif ob["command_name"] == "STOP":
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
+                            item.setForeground(QColor("brown"))
                         elif ob["command_name"] == "BELL":
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
+                            item.setForeground(QColor("darkorchid"))
                         elif ob["command_name"] == "WAIT":
                             txt = ""
                             for k in ["sec", "ut", "sunrise", "sunset"]:
                                 if ob.get(k,None):
                                     txt = txt + f'{k}={ob[k]}'
+                            item = QTableWidgetItem(txt)
+                            item.setForeground(QColor("dodgerblue"))
                         elif ob["command_name"] == "ZERO":
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
                         elif ob["command_name"] == "DARK":
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
                         else:
                             txt = ob["command_name"]
+                            item = QTableWidgetItem(txt)
 
-                        item = QTableWidgetItem(txt)
                         self.table_t.setItem(i, j, item)
 
                     elif key == "UT":
@@ -356,12 +368,6 @@ class Plan_Gui(QWidget):
         # self.grid.addWidget(self.addBell_p, w, 3)
 
         w = w + 1
-        self.line_l = QFrame()
-        self.line_l.setFrameShape(QFrame.Shape.HLine)
-        self.line_l.setFrameShadow(QFrame.Shadow.Raised)
-        self.grid.addWidget(self.line_l, w, 0, 1, 5)
-
-        w = w + 1
         self.edit_p = QPushButton('Edit OB')
         self.edit_p.clicked.connect(self.pocisniecie_edit)
         self.copy_p = QPushButton('Copy OB')
@@ -395,6 +401,12 @@ class Plan_Gui(QWidget):
         self.grid.addWidget(self.delAll_p, w, 0)
         self.grid.addWidget(self.down_p, w, 2)
         self.grid.addWidget(self.last_p, w, 4)
+
+        w = w + 1
+        self.line_l = QFrame()
+        self.line_l.setFrameShape(QFrame.Shape.HLine)
+        self.line_l.setFrameShadow(QFrame.Shadow.Raised)
+        self.grid.addWidget(self.line_l, w, 0, 1, 5)
 
         w = w + 1
         self.load_p = QPushButton('Load Plan')
@@ -600,7 +612,7 @@ class PlotWindow(QWidget):
         #self.fig.tight_layout()
 
         self.canvas.draw()
-        self.show()
+
 
 
     def mkUI(self):
