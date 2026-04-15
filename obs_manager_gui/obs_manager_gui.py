@@ -1367,277 +1367,307 @@ class SkyWindow(QWidget):
 #     TPG WINDOW
 # ######################
 
-
 class TPGWindow(QWidget):
     def __init__(self, parent):
-        super(TPGWindow, self).__init__()
-        self.parent = parent
+        super().__init__()
 
+        self.parent = parent
+        self.p = None
+
+        self.setWindowTitle("TPG Planner")
+        self.setMinimumSize(700, 700)
         self.setStyleSheet("font-size: 11pt;")
-        s#elf.setMinimumSize(100,200)
+
         self.mkUI()
 
+    # =====================================================
+    # UI
+    # =====================================================
+
+    def mkUI(self):
+        grid = QGridLayout(self)
+
+        row = 0
+
+        # ---------------- OPTIONS ----------------
+        self.sunset_start_c = QCheckBox("Start at sunset")
+        self.sunset_start_c.setChecked(True)
+
+        self.avoid_wind_c = QCheckBox("Avoid wind")
+        self.avoid_wind_e = QLineEdit()
+
+        self.fwhm_c = QCheckBox("Limit FWHM")
+        self.fwhm_e = QLineEdit()
+
+        self.seed_c = QCheckBox("Use seed")
+        self.seed_e = QLineEdit()
+
+        self.save_c = QCheckBox("Save plan")
+        self.save_c.setChecked(True)
+
+        self.start_macro_c = QCheckBox("Add start macro")
+        self.start_macro_c.setChecked(True)
+
+        self.end_macro_c = QCheckBox("Add end macro")
+        self.end_macro_c.setChecked(True)
+
+        grid.addWidget(self.sunset_start_c, row, 0, 1, 2); row += 1
+        grid.addWidget(self.avoid_wind_c, row, 0)
+        grid.addWidget(self.avoid_wind_e, row, 1); row += 1
+
+        grid.addWidget(self.fwhm_c, row, 0)
+        grid.addWidget(self.fwhm_e, row, 1); row += 1
+
+        grid.addWidget(self.seed_c, row, 0)
+        grid.addWidget(self.seed_e, row, 1); row += 1
+
+        grid.addWidget(self.save_c, row, 0, 1, 2); row += 1
+        grid.addWidget(self.start_macro_c, row, 0, 1, 2); row += 1
+        grid.addWidget(self.end_macro_c, row, 0, 1, 2); row += 1
+
+        # separator
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.VLine)
+        grid.addWidget(line, 0, 2, row + 10, 1)
+
+        # ---------------- BUTTONS ----------------
+        r = 0
+
+        self.load_p = QPushButton("1. Load / Init")
+        self.load_p.clicked.connect(self.load)
+
+        self.calc_p = QPushButton("2. Calc Object")
+        self.calc_p.clicked.connect(self.calc_ob)
+
+        self.vis_p = QPushButton("3. Visibility")
+        self.vis_p.clicked.connect(self.mask_vis)
+
+        self.moon_p = QPushButton("4. Moon")
+        self.moon_p.clicked.connect(self.mask_moon)
+
+        self.wind_p = QPushButton("5. Wind")
+        self.wind_p.clicked.connect(self.mask_wind)
+
+        self.twilight_p = QPushButton("6. Twilight")
+        self.twilight_p.clicked.connect(self.mask_twilight)
+
+        self.cycle_p = QPushButton("7. Cycle")
+        self.cycle_p.clicked.connect(self.mask_cycle)
+
+        self.time_p = QPushButton("8. Time")
+        self.time_p.clicked.connect(self.mask_startend)
+
+        self.phlim_p = QPushButton("9. Phase limits")
+        self.phlim_p.clicked.connect(self.mask_phstartend)
+
+        self.phmk_p = QPushButton("10. Phase density")
+        self.phmk_p.clicked.connect(self.mask_phase)
+
+        self.run_p = QPushButton("RUN FULL TPG")
+        self.run_p.clicked.connect(self.run_tpg)
+
+        buttons = [
+            self.load_p, self.calc_p, self.vis_p, self.moon_p,
+            self.wind_p, self.twilight_p, self.cycle_p,
+            self.time_p, self.phlim_p, self.phmk_p, self.run_p
+        ]
+
+        for b in buttons:
+            grid.addWidget(b, r, 3)
+            r += 1
+
+        # ---------------- LOG ----------------
+        self.log_e = QTextEdit()
+        self.log_e.setReadOnly(True)
+        grid.addWidget(self.log_e, row + 1, 0, 8, 4)
+
+        # close
+        self.close_p = QPushButton("Close")
+        self.close_p.clicked.connect(self.close)
+        grid.addWidget(self.close_p, row + 10, 3)
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
+
+    def log(self, text):
+        self.log_e.append(text)
+
+    def ok(self, text):
+        self.log(f"{text} <span style='color:green;'>✔</span>")
+
+    def err(self, text):
+        self.log(f"<span style='color:red;'>{text}</span>")
+
+    def sync_visibility(self):
+        for ob in self.p.ob:
+            if "visibility" in ob:
+                idx = ob["index"]
+                self.parent.master_data[idx]["tpg"]["visibility"] = ob["visibility"]
+                self.parent.master_data[idx]["tpg"]["nightTime"] = self.p.nightTime
+
+        self.parent.update_table()
+
+    def ensure_loaded(self):
+        if self.p is None:
+            self.err("Load first!")
+            return False
+        return True
+
+    # =====================================================
+    # CORE
+    # =====================================================
 
     def load(self):
-        tel = self.parent.tel_s.currentText()
+        try:
+            self.log_e.clear()
 
-        date = self.parent.date_e.date().toPyDate()
-        ut =   self.parent.time_e.time().toPyTime()
+            tel = self.parent.tel_s.currentText()
 
-        t0 = datetime.datetime.combine(date, ut)
+            date = self.parent.date_e.date().toPyDate()
+            ut = self.parent.time_e.time().toPyTime()
+            t0 = datetime.datetime.combine(date, ut)
 
-        t_next = self.parent.almanac["next_sunset"]
-        t_prev = self.parent.almanac["prev_sunset"]
+            t_next = self.parent.almanac["next_sunset"]
+            t_prev = self.parent.almanac["prev_sunset"]
 
-        if t_prev <= t0 < t_next:
-            # dzień → bierzemy najbliższy zachód (dzisiejszy)
-            night_start = t_next
-        else:
-            # noc → bierzemy poprzedni zachód
-            night_start = t_prev
+            if t_prev <= t0 < t_next:
+                night_start = t_next
+            else:
+                night_start = t_prev
 
-        dt = [night_start.strftime("%Y/%m/%d")]
+            dt = [night_start.strftime("%Y/%m/%d")]
 
-        self.p = tpg(tel, dt, loud=True)
+            wind = None
+            if self.avoid_wind_c.isChecked():
+                wind = float(self.avoid_wind_e.text())
 
-        self.p.Initiate()
-        self.p.LoadObjects()
-        self.p.ob = []
-        for n,data in enumerate(self.parent.master_data):
-            if data.get("ob",None):
-                line = ObsValidator.convert_from_obdict(data.get("ob"))
-                line = line.split(" ", 1)[1]
-                tmp_ob = self.p.parseObjects(line)
-                tmp_ob["index"] = n
-                self.p.ob.append(tmp_ob)
-        self.p.MakeTime()
-        self.p.ObjectMask()
+            fwhm = None
+            if self.fwhm_c.isChecked():
+                fwhm = float(self.fwhm_e.text())
 
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
+            seed = None
+            if self.seed_c.isChecked():
+                seed = int(self.seed_e.text())
+
+            self.p = tpg(
+                tel,
+                dt,
+                loud=True,
+                wind=wind,
+                fwhm=fwhm,
+                seed=seed,
+                save_plan=self.save_c.isChecked(),
+                add_start_makro=self.start_macro_c.isChecked(),
+                add_end_makro=self.end_macro_c.isChecked(),
+            )
+
+            self.p.Initiate()
+            self.p.LoadObjects()
+
+            self.p.ob = []
+
+            for n, data in enumerate(self.parent.master_data):
+                if data.get("ob", None):
+                    line = ObsValidator.convert_from_obdict(data["ob"])
+                    line = line.split(" ", 1)[1]
+                    tmp = self.p.parseObjects(line)
+                    tmp["index"] = n
+                    self.p.ob.append(tmp)
+
+            self.p.MakeTime()
+            self.p.ObjectMask()
+
+            self.ok("Loaded data")
+            self.ok(f"Night start: {night_start}")
+
+        except Exception as e:
+            self.err(str(e))
+
+    # =====================================================
+    # MASK STEPS
+    # =====================================================
 
     def calc_ob(self):
+        if not self.ensure_loaded(): return
         self.p.CalcObject()
-        self.log_e.append(self.p.msg)
+        self.ok("Calculated objects")
 
     def mask_vis(self):
+        if not self.ensure_loaded(): return
         self.p.MaskVisibility()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-                self.parent.master_data[ob["index"]]["tpg"]["nightTime"] = self.p.nightTime
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-
+        self.sync_visibility()
+        self.ok("Visibility masked")
 
     def mask_moon(self):
+        if not self.ensure_loaded(): return
         self.p.MaskMoon()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Moon masked")
+        self.sync_visibility()
+        self.ok("Moon masked")
 
     def mask_wind(self):
+        if not self.ensure_loaded(): return
         self.p.MaskWind()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Wind masked")
+        self.sync_visibility()
+        self.ok("Wind masked")
 
     def mask_twilight(self):
+        if not self.ensure_loaded(): return
         self.p.MaskTwilight()
-        for n, ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Twilight deley masked")
+        self.sync_visibility()
+        self.ok("Twilight masked")
 
     def mask_cycle(self):
+        if not self.ensure_loaded(): return
         self.p.MaskCycle()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Cycle masked")
+        self.sync_visibility()
+        self.ok("Cycle masked")
 
     def mask_startend(self):
+        if not self.ensure_loaded(): return
         self.p.MaskStartEnd()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Time masked")
+        self.sync_visibility()
+        self.ok("Time masked")
 
     def mask_phstartend(self):
+        if not self.ensure_loaded(): return
         self.p.MaskPhaseStartEnd()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-                print(self.parent.master_data[ob["index"]]["tpg"]["visibility"].keys())
-
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Phase masked")
+        self.sync_visibility()
+        self.ok("Phase limits masked")
 
     def mask_phase(self):
+        if not self.ensure_loaded(): return
         self.p.MaskPhase()
-        for n,ob in enumerate(self.p.ob):
-            if "visibility" in ob.keys():
-                self.parent.master_data[ob["index"]]["tpg"]["visibility"] = ob["visibility"]
-                print(self.parent.master_data[ob["index"]]["tpg"]["visibility"].keys())
+        self.sync_visibility()
+        self.ok("Phase density masked")
 
-        self.parent.update_table()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
-        self.log_e.setText("Phase density masked")
+    # =====================================================
+    # FULL RUN
+    # =====================================================
 
     def run_tpg(self):
         self.load()
-        self.calc_vis()
+        if self.p is None:
+            return
+
+        self.calc_ob()
+        self.mask_vis()
         self.mask_moon()
         self.mask_wind()
+        self.mask_twilight()
         self.mask_cycle()
         self.mask_startend()
         self.mask_phstartend()
         self.mask_phase()
+
         self.p.Waga()
         self.p.RandomizeList()
         self.p.allocate()
-        self.log_e.clear()
-        self.log_e.setText(self.p.msg)
+        self.p.export()
 
-        self.p.export()  # export plan
         self.parent.update_table()
 
-
-    def mkUI(self):
-        grid = QGridLayout()
-
-        # przyciski po lewej stronie
-        w = 0
-        self.sunset_start_c = QCheckBox("Start at SUNSET")
-        self.sunset_start_c.setChecked(True)
-        self.sunset_start_e = QTextEdit()
-
-        grid.addWidget(self.sunset_start_c, w, 0)
-        grid.addWidget(self.sunset_start_e, w, 1)
-
-        w = w + 1
-        self.avoid_wind_c = QCheckBox("Avoid wind direction")
-        self.avoid_wind_c.setChecked(False)
-        self.avoid_wind_e = QTextEdit()
-
-        grid.addWidget(self.avoid_wind_c, w, 0)
-        grid.addWidget(self.avoid_wind_e, w, 1)
-
-        w = w + 1
-        self.fwhm_c = QCheckBox("Limit for FWHM")
-        self.fwhm_c.setChecked(False)
-        self.fwhm_e = QTextEdit()
-
-        grid.addWidget(self.fwhm_c, w, 0)
-        grid.addWidget(self.fwhm_e, w, 1)
-
-        # Tutaj reszta, czyli fwhm, seed
-        # potem sam checkbox do save file (True), start makro (False)m end makro (False)
-
-        # tutaj pionowa linia oddzielanjaca przyciski po prawej stronie
-        w = 0
-        self.line_l = QFrame()
-        self.line_l.setFrameShape(QFrame.Shape.VLine)
-        self.line_l.setFrameShadow(QFrame.Shadow.Raised)
-        self.grid.addWidget(self.line_l, w, 2, 9, 1)
-
-        # przyciski po prawej stronie
-
-        w = 0
-        self.load_p = QPushButton('Load data / Init')
-        self.load_p.clicked.connect(self.load)
-        grid.addWidget(self.load_p, w, 3)
-
-        w = w + 1
-        self.calc_p = QPushButton('Calc Object')
-        self.calc_p.clicked.connect(self.calc_ob)
-        grid.addWidget(self.calc_p, w, 3)
-
-        w = w + 1
-        self.vis_p = QPushButton('Visibility')
-        self.vis_p.clicked.connect(self.mask_vis)
-        grid.addWidget(self.vis_p, w, 3)
-
-        # dalej trzeba poprawic umieszczanie w grid
-        w = w + 1
-        self.moon_p = QPushButton('Moon')
-        self.moon_p.clicked.connect(self.mask_moon)
-        grid.addWidget(self.moon_p, 3, 1)
-
-        w = w + 1
-        self.wind_p = QPushButton('Wind')
-        self.wind_p.clicked.connect(self.mask_wind)
-        grid.addWidget(self.wind_p, 4, 1)
-
-        w = w + 1
-        self.twilight_p = QPushButton('Mask Twilight Delay')
-        self.twilight_p.clicked.connect(self.mask_twilight)
-        grid.addWidget(self.twilight_p, 5, 1)
-
-        w = w + 1
-        self.cycle_p = QPushButton('Cycle')
-        self.cycle_p.clicked.connect(self.mask_cycle)
-        grid.addWidget(self.cycle_p, 6, 1)
-
-        w = w + 1
-        self.time_p = QPushButton('Time')
-        self.time_p.clicked.connect(self.mask_startend)
-        grid.addWidget(self.time_p, 7, 1)
-
-        w = w + 1
-        self.phlim_p = QPushButton('Phase limits')
-        self.phlim_p.clicked.connect(self.mask_phstartend)
-        grid.addWidget(self.phlim_p, 8, 1)
-
-        w = w + 1
-        self.phmk_p = QPushButton('Phase density')
-        self.phmk_p.clicked.connect(self.mask_phase)
-        grid.addWidget(self.phmk_p, 9, 1)
-
-        w = w + 1
-        self.tpg_p = QPushButton('run TPG')
-        self.tpg_p.clicked.connect(self.run_tpg)
-        grid.addWidget(self.tpg_p, w, 0, 1,4)
-
-        w = w + 1
-        self.log_e = QTextEdit()
-        self.log_e.setEditable(False)
-        grid.addWidget(self.log_e, w, 0, 1, 4)
-        # w tym oknie chcial bym aby wyswietlaly sie komunikaty po kazdym etapie uruchamiania tpg, np:
-        # "making timeline <span style='color: green;'>\u2714</span>"
-        # f"plan start: <span style='color: green; font-weight: bold;'> {p.start_time}  </span>"
-        # "calculating visibilities <span style='color: green;'>\u2714</span>"
-
-
-        w = w + 1
-        self.close_p = QPushButton('Close')
-        self.close_p.clicked.connect(lambda: self.close())
-        grid.addWidget(self.close_p, w, 2, 1, 2)
-
-        self.setLayout(grid)
-        self.show()
-
+        self.ok("TPG FINISHED")
 
 
 def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
