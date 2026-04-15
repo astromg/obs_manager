@@ -636,3 +636,320 @@ class PlotWindow(QWidget):
 
         self.setLayout(grid)
         self.show()
+
+
+# ############ EDIT WINDOW
+
+
+class EditWindow(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+
+        self.parent = parent
+        self.validator = self.parent.parent.validator
+
+        self.setWindowTitle("EDIT WINDOW")
+        self.resize(850, 600)
+        self.setStyleSheet("font-size: 11pt;")
+
+        self.schema = self.validator.base_schema
+        self.rules = self.validator.command_rules
+
+        self.updating = False
+
+        self.mkUI()
+        self.load_initial()
+
+    # =====================================================
+    # UI
+    # =====================================================
+
+    def mkUI(self):
+        grid = QGridLayout()
+
+        row = 0
+
+        # block line
+        self.block_e = QLineEdit()
+        self.block_e.textChanged.connect(self.block_changed)
+        grid.addWidget(self.block_e, row, 0, 1, 3)
+
+        row += 1
+
+        # command selector
+        self.type_l = QLabel("TYPE")
+        self.type_s = QComboBox()
+        self.type_s.addItems(list(self.rules.keys()))
+        self.type_s.currentTextChanged.connect(self.command_changed)
+
+        grid.addWidget(self.type_l, row, 0)
+        grid.addWidget(self.type_s, row, 1, 1, 2)
+
+        row += 1
+
+        # table
+        self.tab_t = QTableWidget()
+        self.tab_t.setColumnCount(3)
+        self.tab_t.setHorizontalHeaderLabels(["Parameter", "Value", "Example"])
+        self.tab_t.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.tab_t.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.tab_t.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+
+        self.tab_t.itemChanged.connect(self.table_changed)
+
+        grid.addWidget(self.tab_t, row, 0, 1, 3)
+
+        row += 1
+
+        # status
+        self.status_l = QLabel("Not validated")
+        grid.addWidget(self.status_l, row, 0, 1, 2)
+
+        self.validate_p = QPushButton("Validate OB")
+        self.validate_p.clicked.connect(self.validate_current)
+        grid.addWidget(self.validate_p, row, 2)
+
+        row += 1
+
+        self.close_p = QPushButton("Close")
+        self.close_p.clicked.connect(self.close)
+        grid.addWidget(self.close_p, row, 0)
+
+        self.setLayout(grid)
+
+    # =====================================================
+    # INITIAL LOAD
+    # =====================================================
+
+    def load_initial(self):
+        try:
+            txt = self.parent.plan[self.parent.i]["block"]
+        except Exception:
+            txt = "OBJECT"
+
+        self.block_e.setText(txt)
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
+
+    def parse_block(self, txt):
+        """
+        Very simple parser:
+        COMMAND arg1 arg2 key=val key=val
+        """
+        result = {}
+
+        txt = txt.strip()
+        if not txt:
+            return result
+
+        parts = txt.split()
+        if not parts:
+            return result
+
+        result["command_name"] = parts[0]
+
+        args = []
+        kwargs = {}
+
+        for token in parts[1:]:
+            if "=" in token:
+                k, v = token.split("=", 1)
+                kwargs[k] = v
+            else:
+                args.append(token)
+
+        if len(args) == 1:
+            result["name"] = args[0]
+        elif len(args) == 2:
+            result["ra"] = args[0]
+            result["dec"] = args[1]
+        elif len(args) >= 3:
+            result["name"] = args[0]
+            result["ra"] = args[1]
+            result["dec"] = args[2]
+
+        result.update(kwargs)
+        return result
+
+    def build_block(self):
+        data = self.collect_table_data()
+        txt = self.validator.convert_from_obdict(data)
+        if txt:
+            return txt
+        return ""
+
+    def collect_table_data(self):
+        data = {"command_name": self.type_s.currentText()}
+
+        for row in range(self.tab_t.rowCount()):
+            key = self.tab_t.item(row, 0).data(QtCore.Qt.ItemDataRole.UserRole)
+            val_item = self.tab_t.item(row, 1)
+            if not val_item:
+                continue
+
+            val = val_item.text().strip()
+            if val != "":
+                data[key] = val
+
+        return data
+
+    def schema_prop(self, key):
+        return self.schema.get("properties", {}).get(key, {})
+
+    def tooltip_for(self, key):
+        prop = self.schema_prop(key)
+
+        desc = prop.get("description", "")
+        typ = prop.get("type", "")
+        enum = prop.get("enum", None)
+
+        lines = []
+
+        if desc:
+            lines.append(desc)
+
+        if typ:
+            lines.append(f"Type: {typ}")
+
+        if enum:
+            lines.append("Allowed: " + ", ".join(map(str, enum)))
+
+        return "\n".join(lines)
+
+    def example_for(self, key):
+        prop = self.schema_prop(key)
+        ex = prop.get("examples", [])
+        if ex:
+            return str(ex[0])
+        return ""
+
+    # =====================================================
+    # TABLE GENERATION
+    # =====================================================
+
+    def rebuild_table(self, command_name, values=None):
+        self.updating = True
+
+        self.tab_t.blockSignals(True)
+        self.tab_t.setRowCount(0)
+
+        allowed = self.rules[command_name]["allowed"]
+
+        visible = [x for x in allowed if x != "command_name"]
+
+        for r, key in enumerate(visible):
+            self.tab_t.insertRow(r)
+
+            # parameter
+            item0 = QTableWidgetItem(key)
+            item0.setFlags(item0.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            item0.setData(QtCore.Qt.ItemDataRole.UserRole, key)
+            item0.setToolTip(self.tooltip_for(key))
+            self.tab_t.setItem(r, 0, item0)
+
+            # value
+            val = ""
+            if values and key in values:
+                val = str(values[key])
+
+            item1 = QTableWidgetItem(val)
+            self.tab_t.setItem(r, 1, item1)
+
+            # example
+            item2 = QTableWidgetItem(self.example_for(key))
+            item2.setFlags(item2.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            self.tab_t.setItem(r, 2, item2)
+
+        self.tab_t.blockSignals(False)
+        self.updating = False
+
+    # =====================================================
+    # EVENTS
+    # =====================================================
+
+    def block_changed(self):
+        if self.updating:
+            return
+
+        txt = self.block_e.text()
+        data = self.parse_block(txt)
+
+        cmd = data.get("command_name", "OBJECT")
+        if cmd not in self.rules:
+            return
+
+        self.updating = True
+        self.type_s.setCurrentText(cmd)
+        self.rebuild_table(cmd, data)
+        self.updating = False
+
+    def command_changed(self):
+        if self.updating:
+            return
+
+        cmd = self.type_s.currentText()
+        current = self.collect_table_data()
+        self.rebuild_table(cmd, current)
+
+        self.refresh_block()
+
+    def table_changed(self):
+        if self.updating:
+            return
+        self.refresh_block()
+
+    def refresh_block(self):
+        self.updating = True
+        txt = self.build_block()
+        self.block_e.setText(txt)
+        self.updating = False
+
+    # =====================================================
+    # VALIDATION
+    # =====================================================
+
+    def validate_current(self):
+        data = self.collect_table_data()
+
+        result = self.validator.validate_ob(data)
+
+        row_map = {}
+        for r in range(self.tab_t.rowCount()):
+            key = self.tab_t.item(r, 0).data(QtCore.Qt.ItemDataRole.UserRole)
+            row_map[key] = r
+
+        # clear colors
+        for r in range(self.tab_t.rowCount()):
+            for c in [0, 1]:
+                it = self.tab_t.item(r, c)
+                if it:
+                    it.setBackground(QtGui.QColor("white"))
+
+        # apply colors
+        for key, state in result["result"].items():
+            if key not in row_map:
+                continue
+
+            r = row_map[key]
+
+            color = QtGui.QColor(217, 239, 217) if state is True else QtGui.QColor(255, 180, 80)
+
+            for c in [0, 1]:
+                it = self.tab_t.item(r, c)
+                if it:
+                    it.setBackground(color)
+
+        if result["valid"]:
+            self.status_l.setText("✅ Valid OB")
+            self.status_l.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.status_l.setText("❌ Validation errors")
+            self.status_l.setStyleSheet("color: orange; font-weight: bold;")
