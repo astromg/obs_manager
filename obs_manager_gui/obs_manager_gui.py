@@ -1273,7 +1273,6 @@ class PhaseWindow(QWidget):
         jd_start = time_range.jd[0]
         jd_end = time_range.jd[-1]
 
-        ax.xaxis_date(None)
 
         ticks_priority = []
         ticks_priority.append((self.current_jd, 0))
@@ -1332,6 +1331,7 @@ class PhaseWindow(QWidget):
         self.axes = self.fig.add_subplot(gs[0])
         self.axes2 = self.fig.add_subplot(gs[1])
         self.axes3 = self.fig.add_subplot(gs[2], sharex=self.axes2)
+        self.axes2.tick_params(axis="x", labelbottom=False)
 
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.ephem_e, 0, 1)
