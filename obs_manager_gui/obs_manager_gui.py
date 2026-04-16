@@ -50,6 +50,8 @@ class OM_Gui(QWidget):
     def __init__(self, args, parent=None):
         super().__init__()
         self.plan_gui = None
+        self.phase_window = None
+        self.sky_window = None
 
         self.inactive_statuses = ["deactivated","inactive"]
 
@@ -397,18 +399,25 @@ class OM_Gui(QWidget):
     def update_almanac(self):
         self.obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
         time = Time(self.obs_time, scale='utc')
-        self.almanac = sun_moon_ephem(time, self.tpg_cfg["obs_lat"], self.tpg_cfg["obs_lon"], self.tpg_cfg["obs_elev"], horizon=0*units.deg)
+        self.almanac = sun_moon_ephem(time, self.tpg_cfg["obs_lat"], self.tpg_cfg["obs_lon"], self.tpg_cfg["obs_elev"], horizon=0)
         self.almanac["julian_date"] = time.jd
 
-        txt = ""
-        txt += f'julian date: {time.jd}\n'
-        txt = txt + f'sunset: {self.almanac["next_sunset"]}\n'
-        txt = txt + f'sunrise: {self.almanac["next_sunrise"]}\n'
-        txt = txt + f'moon: {self.almanac["moon_phase"]}\n'
-        txt = txt + f'moonrise: {self.almanac["next_moonrise"]}\n'
-        txt = txt + f'moonset: {self.almanac["next_moonset"]}\n'
+        txt = f"""
 
-        self.almanac_e.setText(txt)
+        <table cellspacing="4">
+        <tr><td><b>Julian date:</b></td><td>{time.jd:.5f}</td> </tr>
+        <tr><td><b>Sunset:</b></td><td>{format_dt(self.almanac["next_sunset"])}</td></tr>
+        <tr><td><b>Sunrise:</b></td><td>{format_dt(self.almanac["next_sunrise"])}</td></tr>
+        <tr><td><b>Moon phase:</b></td><td>{self.almanac["moon_phase"]:.1f} %</td></tr>
+        </table>
+
+
+        """
+
+        # <tr><td><b>Moonrise:</b></td><td>{format_dt(self.almanac["next_moonrise"])}</td></tr>
+        # <tr><td><b>Moonset:</b></td><td>{format_dt(self.almanac["next_moonset"])}</td></tr>
+
+        self.almanac_e.setHtml(txt)
 
     def update_selection(self):
         self.table.selectRow(self.i)
@@ -626,9 +635,10 @@ class OM_Gui(QWidget):
 
         grid = QGridLayout()
 
-
         self.almanac_e = QTextEdit()
-        grid.addWidget(self.almanac_e, 0, 4,3,3)
+        self.almanac_e.setReadOnly(True)
+        self.almanac_e.setStyleSheet("background-color: rgb(235,235,235);")
+        grid.addWidget(self.almanac_e, 0, 6,4,2)
 
         w = 0
         self.tel_s = QComboBox()
@@ -646,54 +656,54 @@ class OM_Gui(QWidget):
         self.time_e.setTime(utc_now.time())
 
         grid.addWidget(self.tel_s, w, 0)
-        grid.addWidget(self.date_l, w, 1)
-        grid.addWidget(self.date_e, w, 2)
-        grid.addWidget(self.time_e, w, 3)
+        grid.addWidget(self.date_l, w, 3)
+        grid.addWidget(self.date_e, w, 4)
+        grid.addWidget(self.time_e, w, 5)
 
         w = w + 1
         self.filter_name_l = QLabel("Filter NAME")
         self.filter_name_e = QLineEdit("")
         self.filter_name_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_name_l, w, 0)
-        grid.addWidget(self.filter_name_e, w, 1)
+        grid.addWidget(self.filter_name_e, w, 1, 1,2)
 
         self.filter_sci_l = QLabel("Filter SCIPROG")
         self.filter_sci_e = QLineEdit("")
         self.filter_sci_e.textChanged.connect(self.update_table)
-        grid.addWidget(self.filter_sci_l, w, 2)
-        grid.addWidget(self.filter_sci_e, w, 3)
+        grid.addWidget(self.filter_sci_l, w, 3)
+        grid.addWidget(self.filter_sci_e, w, 4,1,2)
 
         w = w + 1
         self.filter_pi_l = QLabel("Filter PI")
         self.filter_pi_e = QLineEdit("")
         self.filter_pi_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_pi_l, w, 0)
-        grid.addWidget(self.filter_pi_e, w, 1)
+        grid.addWidget(self.filter_pi_e, w, 1,1,2)
 
         self.filter_tag_l = QLabel("Filter TAG")
         self.filter_tag_e = QLineEdit("")
         self.filter_tag_e.textChanged.connect(self.update_table)
-        grid.addWidget(self.filter_tag_l, w, 2)
-        grid.addWidget(self.filter_tag_e, w, 3)
+        grid.addWidget(self.filter_tag_l, w, 3)
+        grid.addWidget(self.filter_tag_e, w, 4,1,2)
 
         w = w + 1
         self.filter_other_l = QLabel("Filter TXT")
         self.filter_other_e = QLineEdit("")
         self.filter_other_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_other_l, w, 0)
-        grid.addWidget(self.filter_other_e, w, 1)
+        grid.addWidget(self.filter_other_e, w, 1,1,2)
 
         self.fill_uobi_p = QPushButton("Fill UOBI")
         self.fill_uobi_p.clicked.connect(self.fill_uobi)
-        grid.addWidget(self.fill_uobi_p, w, 2)
+        grid.addWidget(self.fill_uobi_p, w, 3)
 
         self.all_c = QCheckBox("Edit Column")
         self.all_c.setChecked(False)
-        grid.addWidget(self.all_c, w, 3)
+        grid.addWidget(self.all_c, w, 4)
 
         self.showAll_p = QCheckBox("Show All")
         self.showAll_p.setChecked(True)
-        grid.addWidget(self.showAll_p, w, 4)
+        grid.addWidget(self.showAll_p, w, 5)
         self.showAll_p.stateChanged.connect(self.update_table)
 
         w = w + 1
@@ -703,12 +713,9 @@ class OM_Gui(QWidget):
         #self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setStyleSheet("selection-background-color: rgb(217,239,217); selection-color: black; ")
 
-        grid.addWidget(self.table, w, 0, 1, 7)
+        grid.addWidget(self.table, w, 0, 1, 8)
 
         w = w + 1
-        self.sky_p = QPushButton("Plot SkyMap")
-        self.sky_p.clicked.connect(self.plot_sky_map)
-        grid.addWidget(self.sky_p, w, 3)
 
         self.deleteOB_p = QPushButton("Delete OB")
         self.deleteOB_p.clicked.connect(self.delete_line)
@@ -716,52 +723,65 @@ class OM_Gui(QWidget):
 
         self.validate_p = QPushButton("Validate OB")
         self.validate_p.clicked.connect(self.validate_ob)
-        grid.addWidget(self.validate_p, w, 1)
+        grid.addWidget(self.validate_p, w, 2)
+
+        self.sky_p = QPushButton("Plot SkyMap")
+        self.sky_p.clicked.connect(self.plot_sky_map)
+        grid.addWidget(self.sky_p, w, 4,1,2)
+
+        self.add_p = QPushButton("Add to Plan")
+        self.add_p.clicked.connect(self.add_to_plan)
+        grid.addWidget(self.add_p, w, 6 ,1 ,2)
+
+        w = w + 1
 
         self.visibility_p = QPushButton("Visibility")
         self.visibility_p.clicked.connect(self.calc_visibility)
         grid.addWidget(self.visibility_p, w, 2)
 
-        self.add_p = QPushButton("Add to Plan")
-        self.add_p.clicked.connect(self.add_to_plan)
-        grid.addWidget(self.add_p, w, 4)
-
-        w = w + 1
+        self.data_p = QPushButton("Plot data")
+        self.data_p.clicked.connect(self.plot_data)
+        grid.addWidget(self.data_p, w, 4,1,2)
 
         self.tpg_p = QPushButton("TPG")
         self.tpg_p.clicked.connect(self.tpg_show)
-        grid.addWidget(self.tpg_p, w, 1)
+        grid.addWidget(self.tpg_p, w, 6 ,1 ,2)
 
-        self.data_p = QPushButton("Plot data")
-        self.data_p.clicked.connect(self.plot_data)
-        grid.addWidget(self.data_p, w, 3)
+
+        w = w + 1
 
         self.copy_p = QPushButton("Copy")
         self.copy_p.clicked.connect(self.copy_ob)
         grid.addWidget(self.copy_p, w, 0)
 
-        w = w + 1
-        self.load_p = QPushButton("Load file")
-        self.load_p.clicked.connect(self.load_file)
-        grid.addWidget(self.load_p, w, 0)
-
         self.last_p = QPushButton("Last obs")
         self.last_p.clicked.connect(self.last_obs)
-        grid.addWidget(self.last_p, w, 1)
+        grid.addWidget(self.last_p, w, 2)
 
         self.save_p = QPushButton("Save")
         self.save_p.clicked.connect(self.save_file)
-        grid.addWidget(self.save_p, w, 3)
+        grid.addWidget(self.save_p, w, 6,1,2)
 
+        w = w + 1
+
+        self.line_l = QFrame()
+        self.line_l.setFrameShape(QFrame.Shape.HLine)
+        self.line_l.setFrameShadow(QFrame.Shadow.Raised)
+        grid.addWidget(self.line_l, w, 0, 1, 8)
+
+        w = w + 1
+
+        self.load_p = QPushButton("Load file")
+        self.load_p.clicked.connect(self.load_file)
+        grid.addWidget(self.load_p, w, 0, 1,2)
 
         self.config_p = QPushButton("\u2699")
         self.config_p.clicked.connect(self.open_config)
         grid.addWidget(self.config_p, w, 2)
 
-        w = w + 1
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(QApplication.quit)
-        grid.addWidget(self.close_p, w, 4, 1, 3)
+        grid.addWidget(self.close_p, w, 6, 1, 2)
 
         self.setLayout(grid)
 
@@ -778,6 +798,7 @@ class PhaseWindow(QWidget):
         self.parent = parent
         self.target = target
         self.data_dir = data_dir
+        self.zaznaczenie_i = -1
         self.ob = data["ob"]
         self.data = data
 
@@ -789,6 +810,25 @@ class PhaseWindow(QWidget):
         except FileNotFoundError:
             pass
         self.refresh()
+
+        cid = self.canvas.mpl_connect('key_press_event', self.zaznaczenie)
+
+
+    def zaznaczenie(self,event):
+        if event.key == "f":
+            if event.xdata != None:
+                x = float(event.xdata)
+                y = float(event.ydata)
+
+                dx = self.jd - x
+                dy = self.mag - y
+                r = dx**2+dy**2
+                i = numpy.argmin(r)
+
+                self.zaznaczenie_i = i
+                print(self.fits_file[i])
+                self.refresh()
+
 
 
     def get_object(self):
@@ -830,6 +870,8 @@ class PhaseWindow(QWidget):
         self.canvas.draw()
         self.fig.subplots_adjust(hspace=0.3)
         self.show()
+        self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.canvas.setFocus()
 
     # ========================
     # TIME + EPHEMERIS
@@ -862,31 +904,33 @@ class PhaseWindow(QWidget):
         self.axes.clear()
 
         try:
-            jd, mag, flag = self._load_lightcurve()
+            fits_file, jd, mag, flag = self._load_lightcurve()
             if len(jd) == 0:
                 return
 
-            jd = numpy.array(jd)
-            mag = numpy.array(mag)
-            flag = numpy.array(flag)
+            self.jd = numpy.array(jd)
+            self.mag = numpy.array(mag)
+            self.flag = numpy.array(flag)
+            self.fits_file = fits_file
 
             self.now_t = self.current_jd
 
             if self.phase_c.isChecked():
-                jd = self._convert_to_phase(jd)
+                self.jd = self._convert_to_phase(self.jd)
                 plot_cycle = False
 
-                self._plot_phase_constraints(jd, flag)
+                self._plot_phase_constraints(self.jd, self.flag)
             else:
                 self.axes.set_title(f"{self.target}")
 
-            self._plot_recent_and_all(jd, mag, flag)
-            self._format_lightcurve_axes(mag)
+            self._plot_recent_and_all(self.jd, self.mag, self.flag)
+            self._plot_zaznaczenie(self.jd, self.mag, self.flag)
+            self._format_lightcurve_axes(self.mag)
 
             self.axes.axvline(self.now_t, color="blue")
 
-            plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(jd, flag)
-            self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, mag)
+            plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(self.jd, self.flag)
+            self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, self.mag)
 
             self._plot_time_markers()
 
@@ -981,7 +1025,7 @@ class PhaseWindow(QWidget):
         file = self.ob.get("obs_data",f"{self.target.lower()}/{filter_name}/light-curve/{self.target.lower()}_{filter_name}_diff_light_curve.txt")
         fpath = self.data_dir+"/"+file
         tab = Table.read(fpath, format="ascii")
-        return tab["jd_obs"], tab["mag"], tab["quality"]
+        return tab["file"], tab["jd_obs"], tab["mag"], tab["quality"]
 
     def _convert_to_phase(self, jd):
         if "P" not in self.ob:
@@ -1000,6 +1044,11 @@ class PhaseWindow(QWidget):
         self.axes.set_title(f"{self.target} P={P}")
 
         return jd
+
+    def _plot_zaznaczenie(self, jd, mag, flag):
+        if self.zaznaczenie_i > 0:
+            self.axes.plot(self.jd[self.zaznaczenie_i], self.mag[self.zaznaczenie_i], "ro", alpha=1)
+
 
     def _plot_recent_and_all(self, jd, mag, flag):
         recent_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
@@ -1747,67 +1796,70 @@ class TPGWindow(QWidget):
 
         self.show()
 
-def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
 
-    loc = EarthLocation(lat=lat*units.deg, lon=lon*units.deg, height=altitude*units.m)
-    t0 = Time(obs_time)
-    jd = t0.jd
-
-    delta_min = 1 * units.min
-    times = t0 + delta_min * numpy.arange(-24*60, 24*60)
-
-    # --- sun ---
-    sun_alt = get_sun(times).transform_to(AltAz(obstime=times, location=loc)).alt - horizon
-    sun_crossings = numpy.where(numpy.diff(numpy.sign(sun_alt.value)))[0]
-
-    sunrise_times, sunset_times = [], []
-    for c in sun_crossings:
-        t_cross = times[c].to_datetime()
-        if sun_alt[c] < 0 and sun_alt[c+1] > 0:
-            sunrise_times.append(t_cross)
-        else:
-            sunset_times.append(t_cross)
-
-    sunrise_times = sorted(sunrise_times)
-    sunset_times = sorted(sunset_times)
-
-    prev_sunrise = max([t for t in sunrise_times if t <= obs_time], default=None)
-    next_sunrise = min([t for t in sunrise_times if t > obs_time], default=None)
-    prev_sunset  = max([t for t in sunset_times if t <= obs_time], default=None)
-    next_sunset  = min([t for t in sunset_times if t > obs_time], default=None)
-
-    # --- moon ---
-    moon_alt = get_moon(times).transform_to(AltAz(obstime=times, location=loc)).alt
-    moon_crossings = numpy.where(numpy.diff(numpy.sign(moon_alt.value)))[0]
-
-    moonrise_times, moonset_times = [], []
-    for c in moon_crossings:
-        t_cross = times[c].to_datetime()
-        if moon_alt[c] < 0 and moon_alt[c+1] > 0:
-            moonrise_times.append(t_cross)
-        else:
-            moonset_times.append(t_cross)
-
-    moonrise_times = sorted(moonrise_times)
-    moonset_times = sorted(moonset_times)
-
-    prev_moonrise = max([t for t in moonrise_times if t <= obs_time], default=None)
-    next_moonrise = min([t for t in moonrise_times if t > obs_time], default=None)
-    prev_moonset  = max([t for t in moonset_times if t <= obs_time], default=None)
-    next_moonset  = min([t for t in moonset_times if t > obs_time], default=None)
-
-    # --- moon phase z ephem (astropy nie ma) ---
+def sun_moon_ephem(obs_time, lat, lon, altitude=0, horizon=0):
 
     obs = ephem.Observer()
-    obs.lat = lat
-    obs.lon = lon
+    obs.lat = str(lat)
+    obs.lon = str(lon)
+    obs.elevation = altitude
+    obs.horizon = str(horizon)  # np. '0' albo '-0:34' dla refrakcji
     obs.date = str(obs_time)
 
-    moon_ph = ephem.Moon(obs).phase
+    sun = ephem.Sun()
+    moon = ephem.Moon()
 
+    # --- Sun ---
+    try:
+        prev_sunrise = obs.previous_rising(sun).datetime()
+    except:
+        prev_sunrise = None
+
+    try:
+        next_sunrise = obs.next_rising(sun).datetime()
+    except:
+        next_sunrise = None
+
+    try:
+        prev_sunset = obs.previous_setting(sun).datetime()
+    except:
+        prev_sunset = None
+
+    try:
+        next_sunset = obs.next_setting(sun).datetime()
+    except:
+        next_sunset = None
+
+    # --- Moon ---
+    try:
+        prev_moonrise = obs.previous_rising(moon).datetime()
+    except:
+        prev_moonrise = None
+
+    try:
+        next_moonrise = obs.next_rising(moon).datetime()
+    except:
+        next_moonrise = None
+
+    try:
+        prev_moonset = obs.previous_setting(moon).datetime()
+    except:
+        prev_moonset = None
+
+    try:
+        next_moonset = obs.next_setting(moon).datetime()
+    except:
+        next_moonset = None
+
+    # --- Moon phase ---
+    moon.compute(obs)
+    moon_phase = moon.phase  # %
+
+    # --- Julian Date ---
+    julian_date = ephem.julian_date(obs.date)
 
     return {
-        "julian_date": jd,
+        "julian_date": julian_date,
         "prev_sunrise": prev_sunrise,
         "next_sunrise": next_sunrise,
         "prev_sunset": prev_sunset,
@@ -1816,7 +1868,7 @@ def sun_moon_ephem(obs_time, lat, lon, altitude, horizon=0*units.deg):
         "next_moonrise": next_moonrise,
         "prev_moonset": prev_moonset,
         "next_moonset": next_moonset,
-        "moon_phase": moon_ph
+        "moon_phase": moon_phase
     }
 
 
@@ -1900,3 +1952,8 @@ def merge_schemas(base: dict, extra: dict) -> dict:
         )
 
     return merged
+
+def format_dt(dt):
+    if dt is None:
+        return "—"
+    return dt.strftime("%Y-%m-%d %H:%M:%S")

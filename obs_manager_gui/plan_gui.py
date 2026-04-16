@@ -337,7 +337,7 @@ class Plan_Gui(QWidget):
 
     def mkUI(self):
         self.setWindowTitle("Plan")
-        self.resize(400, 800)
+        self.resize(500, 800)
 
         self.grid = QGridLayout()
 
