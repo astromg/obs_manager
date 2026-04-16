@@ -4,6 +4,7 @@ import math
 import os,sys
 import datetime
 import uuid
+import subprocess
 from operator import index
 
 import yaml
@@ -829,6 +830,11 @@ class PhaseWindow(QWidget):
                 print(self.fits_file[i])
                 self.refresh()
 
+                tel = self.parent.tel
+                path = f'/data/fits/{tel}/raw/{self.fits_file[i].split("_")[1]}/{self.fits_file[i].replace("_ap.txt", ".fits")}'
+
+                subprocess.run(["fv", path])
+                # DUPA
 
 
     def get_object(self):
@@ -866,6 +872,7 @@ class PhaseWindow(QWidget):
         self._plot_lightcurve()
         self._plot_visibility()
         self._plot_tpg()
+
 
         self.fig.subplots_adjust(hspace=0.35)
         self.canvas.draw()
@@ -1132,6 +1139,9 @@ class PhaseWindow(QWidget):
             x = sunrise - sunrise_dt
             self.axes2.axvline(x, color="navy", ls=":", lw=1.5, label="before sunrise")
 
+        nt = time_range.jd
+        self._set_time_ticks(self.axes2, Time(nt, format="jd"))
+
 
 
     def _compute_altaz(self, time_range):
@@ -1202,6 +1212,16 @@ class PhaseWindow(QWidget):
     def _plot_tpg(self):
         self.axes3.clear()
 
+        self.axes3.set_xlim(self.axes2.get_xlim())
+
+        ticks = self.axes2.get_xticks()
+        labels = [tick.get_text() for tick in self.axes2.get_xticklabels()]
+
+        self.axes3.set_xticks(ticks)
+        self.axes3.set_xticklabels(labels)
+
+        self.axes3.set_xlabel("UT")
+
         tpg = self.data.get("tpg")
         if not tpg:
             return
@@ -1243,8 +1263,7 @@ class PhaseWindow(QWidget):
         self.axes3.set_xlim(self.axes2.get_xlim())
         self.axes3.set_ylim(-0.8, len(labels) - 0.2)
 
-        #self._set_time_ticks(self.axes3, Time(nt, format="jd"))
-        self.axes3.set_xlabel("UT")
+
 
     def _split_segments(self, nt, values):
         green, red = [], []
@@ -1303,13 +1322,12 @@ class PhaseWindow(QWidget):
             if not filtered or abs(t - filtered[-1]) > min_sep:
                 filtered.append(t)
 
-        ax.set_xticks(filtered)
-        ax.set_xticklabels(
-            [Time(t, format="jd").datetime.strftime("%H:%M") for t in filtered],
-            rotation=0
-        )
 
-        ax.set_xlim(jd_start, jd_end)
+        labels = [Time(t, format="jd").datetime.strftime("%H:%M") for t in filtered]
+
+        ax.set_xticks(filtered)
+        ax.set_xticklabels(labels,rotation=0)
+
 
 
     def mkUI(self):
@@ -1336,8 +1354,7 @@ class PhaseWindow(QWidget):
 
         self.axes = self.fig.add_subplot(gs[0])
         self.axes2 = self.fig.add_subplot(gs[1])
-        self.axes3 = self.fig.add_subplot(gs[2], sharex=self.axes2)
-        self.axes2.tick_params(axis="x", labelbottom=False)
+        self.axes3 = self.fig.add_subplot(gs[2])
 
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.ephem_e, 0, 1)
