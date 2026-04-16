@@ -1132,9 +1132,7 @@ class PhaseWindow(QWidget):
             x = sunrise - sunrise_dt
             self.axes2.axvline(x, color="navy", ls=":", lw=1.5, label="before sunrise")
 
-        self._set_time_ticks(self.axes2, time_range)
-        self.axes2.legend(loc="upper right", fontsize=8, ncol=2)
-        self.axes2.set_xlabel("UT")
+
 
     def _compute_altaz(self, time_range):
         loc = EarthLocation(
@@ -1245,7 +1243,7 @@ class PhaseWindow(QWidget):
         self.axes3.set_xlim(self.axes2.get_xlim())
         self.axes3.set_ylim(-0.8, len(labels) - 0.2)
 
-        self._set_time_ticks(self.axes3, Time(nt, format="jd"))
+        #self._set_time_ticks(self.axes3, Time(nt, format="jd"))
         self.axes3.set_xlabel("UT")
 
     def _split_segments(self, nt, values):
@@ -1270,41 +1268,49 @@ class PhaseWindow(QWidget):
 
     # Funkcja ustawiająca inteligentne ticki
     def _set_time_ticks(self, ax, time_range):
-        jd_start = time_range.jd[0]
-        jd_end = time_range.jd[-1]
+        jd_start = float(time_range.jd[0])
+        jd_end = float(time_range.jd[-1])
 
+        ticks = []
 
-        ticks_priority = []
-        ticks_priority.append((self.current_jd, 0))
+        # now
+        ticks.append(self.current_jd)
 
-        if self.parent.almanac.get("next_sunset"):
-            ticks_priority.append((Time(self.parent.almanac["next_sunset"]).jd, 1))
-        if self.parent.almanac.get("next_sunrise"):
-            ticks_priority.append((Time(self.parent.almanac["next_sunrise"]).jd, 1))
-        if self.parent.almanac.get("next_moonrise"):
-            ticks_priority.append((Time(self.parent.almanac["next_moonrise"]).jd, 2))
-        if self.parent.almanac.get("next_moonset"):
-            ticks_priority.append((Time(self.parent.almanac["next_moonset"]).jd, 2))
+        # sunset / sunrise
+        for key in ["next_sunset", "next_sunrise",
+                    "next_moonrise", "next_moonset"]:
+            val = self.parent.almanac.get(key)
+            if val:
+                t = Time(val).jd
+                if jd_start <= t <= jd_end:
+                    ticks.append(t)
 
-        # every 2h
-        for tt in numpy.arange(jd_start, jd_end, 2 / 24.0):
-            ticks_priority.append((tt, 3))
+        # regular every 2h
+        step = 2 / 24.0
+        t0 = jd_start
+        while t0 <= jd_end:
+            ticks.append(t0)
+            t0 += step
 
-        ticks_priority.sort(key=lambda x: x[1])
+        # sort + unique
+        ticks = sorted(set([round(x, 6) for x in ticks]))
 
-        # FIX: 30 minutes
-        min_distance = 30 / 60 / 24
+        # remove too close ticks (30 min)
+        filtered = []
+        min_sep = 30 / 60 / 24.0
 
-        final_ticks = []
-        for jd_val, prio in ticks_priority:
-            if all(abs(jd_val - t) > min_distance for t in final_ticks):
-                final_ticks.append(jd_val)
+        for t in ticks:
+            if not filtered or abs(t - filtered[-1]) > min_sep:
+                filtered.append(t)
 
-        final_ticks.sort()
+        ax.set_xticks(filtered)
+        ax.set_xticklabels(
+            [Time(t, format="jd").datetime.strftime("%H:%M") for t in filtered],
+            rotation=0
+        )
 
-        ax.set_xticks(final_ticks)
-        ax.xaxis.set_major_formatter(mticker.FuncFormatter(self._format_jd_tick))
-        ax.tick_params(axis="x", labelrotation=0)
+        ax.set_xlim(jd_start, jd_end)
+
 
     def mkUI(self):
         grid = QGridLayout()
