@@ -2,8 +2,9 @@
 import datetime
 import ephem
 
+from PyQt6 import QtCore
 from PyQt6.QtWidgets import QTableWidget, QAbstractItemView, QTableWidgetItem, QWidget, QGridLayout, QPushButton, \
-    QFrame, QFileDialog
+    QFrame, QFileDialog, QLineEdit, QLabel, QComboBox, QHeaderView
 from PyQt6.QtGui import QFont, QColor
 
 from astropy.time import Time
@@ -24,7 +25,7 @@ class Plan_Gui(QWidget):
         super().__init__()
         self.parent = parent
         self.plan_plot_window = None
-        self.table_header = ["UT", "Name", "Alt@UT", "Moon dist"]
+        self.table_header = ["UT", "Name", "Alt@UT", "Az@UT", "Moon dist"]
         self.plan = []
         self.i = -1
 
@@ -45,9 +46,9 @@ class Plan_Gui(QWidget):
     def update_ephem(self):
 
         oca = ephem.Observer()
-        oca.lon = str(self.parent.cfg["obs_longitude"])
-        oca.lat = str(self.parent.cfg["obs_latitude"])
-        oca.elev = float(self.parent.cfg["obs_elevation"])
+        oca.lon = str(self.parent.tpg_cfg["obs_lon"])
+        oca.lat = str(self.parent.tpg_cfg["obs_lat"])
+        oca.elev = float(self.parent.tpg_cfg["obs_elev"])
         oca.horizon = "0"
 
         moon = ephem.Moon()
@@ -184,6 +185,7 @@ class Plan_Gui(QWidget):
                             txt = data["ut"].split()[1].split(":")[0] + ":" + data["ut"].split()[1].split(":")[1]
                             #txt = data["ut"]
                         item = QTableWidgetItem(txt)
+                        item.setBackground(QColor(235, 235, 235))
                         self.table_t.setItem(i, j, item)
 
                     elif key == "Alt@UT":
@@ -191,6 +193,15 @@ class Plan_Gui(QWidget):
                         if data.get("alt",None):
                             txt = f'{data["alt"]:.0f}'
                         item = QTableWidgetItem(txt)
+                        item.setBackground(QColor(235, 235, 235))
+                        self.table_t.setItem(i, j, item)
+
+                    elif key == "Az@UT":
+                        txt = ""
+                        if data.get("az",None):
+                            txt = f'{data["az"]:.0f}'
+                        item = QTableWidgetItem(txt)
+                        item.setBackground(QColor(235, 235, 235))
                         self.table_t.setItem(i, j, item)
 
                     elif key == "Moon dist":
@@ -198,6 +209,7 @@ class Plan_Gui(QWidget):
                         if data.get("moon_sep",None):
                             txt = f'{data["moon_sep"]:.0f}'
                         item = QTableWidgetItem(txt)
+                        item.setBackground(QColor(235, 235, 235))
                         self.table_t.setItem(i, j, item)
 
                     else:
@@ -214,20 +226,6 @@ class Plan_Gui(QWidget):
 
         if self.plan_plot_window:
             self.plan_plot_window.refresh()
-
-        # max_column_width = 100  # Maksymalna szerokość kolumny
-        # for col in range(self.table_t.columnCount()):
-        #     self.table_t.setColumnWidth(col, min(self.table_t.columnWidth(col), max_column_width))
-
-
-
-
-
-    # def update_selection(self):
-    #     self.table_t.selectRow(self.i)
-    #
-
-
 
     def pocisniecie_tabelki(self,i,j):
         self.i = i
@@ -289,7 +287,12 @@ class Plan_Gui(QWidget):
         self.plan_plot_window = PlotWindow(self)
 
     def pocisniecie_edit(self):
-        pass
+        self.edit_window = EditWindow(self)
+
+    def pocisniecie_add(self):
+        self.add({"command_name":"OBJECT"})
+        self.update_table()
+        self.add_window = EditWindow(self)
 
     def pocisniecie_copy(self):
         if len(self.plan) == 0:
@@ -300,7 +303,7 @@ class Plan_Gui(QWidget):
         self.update_table()
 
     def pocisniecie_load(self):
-        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.parent.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
+        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.parent.tpg_cfg["plan_catalog"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
         if file_path:
             try:
                 with open(file_path, 'r') as plik:
@@ -323,7 +326,7 @@ class Plan_Gui(QWidget):
             ob = data["ob"]
             txt = txt + ObsValidator.convert_from_obdict(ob) + "\n"
 
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.parent.cfg["master_file"], "Text Files (*.txt);;All Files (*)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.parent.tpg_cfg["plan_catalog"], "Text Files (*.txt);;All Files (*)")
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as file:
@@ -334,12 +337,13 @@ class Plan_Gui(QWidget):
 
     def mkUI(self):
         self.setWindowTitle("Plan")
-        self.resize(600, 800)
+        self.resize(400, 800)
 
         self.grid = QGridLayout()
 
         w = 0
         self.table_t = QTableWidget()
+        self.table_t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_t.setHorizontalHeaderLabels(self.table_header)
         self.table_t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # zaznaczenie całego wiersza
         self.table_t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -370,10 +374,15 @@ class Plan_Gui(QWidget):
         w = w + 1
         self.edit_p = QPushButton('Edit OB')
         self.edit_p.clicked.connect(self.pocisniecie_edit)
+
+        self.add_p = QPushButton('Add OB')
+        self.add_p.clicked.connect(self.pocisniecie_add)
+
         self.copy_p = QPushButton('Copy OB')
         self.copy_p.clicked.connect(self.pocisniecie_copy)
 
-        self.grid.addWidget(self.edit_p, w, 4)
+        self.grid.addWidget(self.add_p, w, 4)
+        self.grid.addWidget(self.edit_p, w, 2)
         self.grid.addWidget(self.copy_p, w, 0)
 
         w = w + 1
@@ -464,9 +473,9 @@ class PlotWindow(QWidget):
         self.axes.clear()
 
         self.oca = ephem.Observer()
-        self.oca.lon = str(self.parent.parent.cfg["obs_longitude"])
-        self.oca.lat = str(self.parent.parent.cfg["obs_latitude"])
-        self.oca.elev = float(self.parent.parent.cfg["obs_elevation"])
+        self.oca.lon = str(self.parent.parent.tpg_cfg["obs_lon"])
+        self.oca.lat = str(self.parent.parent.tpg_cfg["obs_lat"])
+        self.oca.elev = float(self.parent.parent.tpg_cfg["obs_elev"])
         self.oca.horizon = "0"
 
         self.obs_time = self.parent.obs_time
@@ -637,147 +646,104 @@ class PlotWindow(QWidget):
         self.setLayout(grid)
         self.show()
 
-
-# ############ EDIT WINDOW
-
+# ########################################
+#              EDIT WINDOW
+# ########################################
 
 class EditWindow(QWidget):
     def __init__(self, parent):
         super().__init__()
 
         self.parent = parent
-        self.validator = self.parent.parent.validator
 
-        self.setWindowTitle("EDIT WINDOW")
-        self.resize(850, 600)
+        self.base_schema = ObsValidator.load_schema("base_schema.yaml")
+        self.command_rules = ObsValidator.load_schema("command_rules.yaml")
+        self.validator = ObsValidator(self.base_schema, self.command_rules)
+
+        self.setWindowTitle(" OB EDIT WINDOW")
+        self.resize(600, 600)
         self.setStyleSheet("font-size: 11pt;")
-
-        self.schema = self.validator.base_schema
-        self.rules = self.validator.command_rules
 
         self.updating = False
 
         self.mkUI()
         self.load_initial()
 
-    # =====================================================
-    # UI
-    # =====================================================
-
     def mkUI(self):
         grid = QGridLayout()
 
-        row = 0
-
+        r = 0
         # block line
         self.block_e = QLineEdit()
         self.block_e.textChanged.connect(self.block_changed)
-        grid.addWidget(self.block_e, row, 0, 1, 3)
+        grid.addWidget(self.block_e, r, 0, 1, 3)
 
-        row += 1
-
+        r += 1
         # command selector
         self.type_l = QLabel("TYPE")
         self.type_s = QComboBox()
-        self.type_s.addItems(list(self.rules.keys()))
+        self.type_s.addItems(list(self.command_rules.keys()))
         self.type_s.currentTextChanged.connect(self.command_changed)
 
-        grid.addWidget(self.type_l, row, 0)
-        grid.addWidget(self.type_s, row, 1, 1, 2)
+        grid.addWidget(self.type_l, r, 0)
+        grid.addWidget(self.type_s, r, 1, 1, 2)
 
-        row += 1
-
+        r += 1
         # table
         self.tab_t = QTableWidget()
         self.tab_t.setColumnCount(3)
         self.tab_t.setHorizontalHeaderLabels(["Parameter", "Value", "Example"])
-        self.tab_t.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.tab_t.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
-        )
-        self.tab_t.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.ResizeToContents
-        )
+        self.tab_t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.tab_t.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.tab_t.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.tab_t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # zaznaczenie całego wiersza
+        self.tab_t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tab_t.setStyleSheet("selection-background-color: rgb(200,220,255); selection-color: black; ")
+        self.tab_t.verticalHeader().hide()
 
         self.tab_t.itemChanged.connect(self.table_changed)
 
-        grid.addWidget(self.tab_t, row, 0, 1, 3)
+        grid.addWidget(self.tab_t, r, 0, 1, 3)
 
-        row += 1
-
+        r += 1
         # status
         self.status_l = QLabel("Not validated")
-        grid.addWidget(self.status_l, row, 0, 1, 2)
+        grid.addWidget(self.status_l, r, 0, 1, 2)
 
         self.validate_p = QPushButton("Validate OB")
         self.validate_p.clicked.connect(self.validate_current)
-        grid.addWidget(self.validate_p, row, 2)
+        grid.addWidget(self.validate_p, r, 1, 1 ,2)
 
-        row += 1
+        r += 1
+
+        self.save_p = QPushButton("Save")
+        self.save_p.clicked.connect(self.save_ob)
+        grid.addWidget(self.save_p, r, 2)
 
         self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(self.close)
-        grid.addWidget(self.close_p, row, 0)
+        grid.addWidget(self.close_p, r, 0)
 
         self.setLayout(grid)
+        self.show()
 
-    # =====================================================
-    # INITIAL LOAD
-    # =====================================================
+    def save_ob(self):
+        if self.validate_current():
+            self.parent.plan[self.parent.i]["ob"] = self.collect_table_data()
+            self.parent.update_table()
 
     def load_initial(self):
         try:
-            txt = self.parent.plan[self.parent.i]["block"]
+            self.ob = self.parent.plan[self.parent.i]["ob"]
+            txt = ObsValidator.convert_from_obdict(self.ob)
         except Exception:
-            txt = "OBJECT"
+            print("ERROR: Loading OB")
+            txt = "ERROR"
 
         self.block_e.setText(txt)
+        self.block_e.setCursorPosition(0)
 
-    # =====================================================
-    # HELPERS
-    # =====================================================
-
-    def parse_block(self, txt):
-        """
-        Very simple parser:
-        COMMAND arg1 arg2 key=val key=val
-        """
-        result = {}
-
-        txt = txt.strip()
-        if not txt:
-            return result
-
-        parts = txt.split()
-        if not parts:
-            return result
-
-        result["command_name"] = parts[0]
-
-        args = []
-        kwargs = {}
-
-        for token in parts[1:]:
-            if "=" in token:
-                k, v = token.split("=", 1)
-                kwargs[k] = v
-            else:
-                args.append(token)
-
-        if len(args) == 1:
-            result["name"] = args[0]
-        elif len(args) == 2:
-            result["ra"] = args[0]
-            result["dec"] = args[1]
-        elif len(args) >= 3:
-            result["name"] = args[0]
-            result["ra"] = args[1]
-            result["dec"] = args[2]
-
-        result.update(kwargs)
-        return result
 
     def build_block(self):
         data = self.collect_table_data()
@@ -802,7 +768,7 @@ class EditWindow(QWidget):
         return data
 
     def schema_prop(self, key):
-        return self.schema.get("properties", {}).get(key, {})
+        return self.base_schema.get("properties", {}).get(key, {})
 
     def tooltip_for(self, key):
         prop = self.schema_prop(key)
@@ -831,9 +797,6 @@ class EditWindow(QWidget):
             return str(ex[0])
         return ""
 
-    # =====================================================
-    # TABLE GENERATION
-    # =====================================================
 
     def rebuild_table(self, command_name, values=None):
         self.updating = True
@@ -841,7 +804,7 @@ class EditWindow(QWidget):
         self.tab_t.blockSignals(True)
         self.tab_t.setRowCount(0)
 
-        allowed = self.rules[command_name]["allowed"]
+        allowed = self.command_rules[command_name]["allowed"]
 
         visible = [x for x in allowed if x != "command_name"]
 
@@ -850,6 +813,7 @@ class EditWindow(QWidget):
 
             # parameter
             item0 = QTableWidgetItem(key)
+            item0.setBackground(QColor(235, 235, 235))
             item0.setFlags(item0.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
             item0.setData(QtCore.Qt.ItemDataRole.UserRole, key)
             item0.setToolTip(self.tooltip_for(key))
@@ -865,30 +829,29 @@ class EditWindow(QWidget):
 
             # example
             item2 = QTableWidgetItem(self.example_for(key))
+            item2.setBackground(QColor(235, 235, 235))
             item2.setFlags(item2.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
             self.tab_t.setItem(r, 2, item2)
 
         self.tab_t.blockSignals(False)
         self.updating = False
 
-    # =====================================================
-    # EVENTS
-    # =====================================================
 
     def block_changed(self):
         if self.updating:
             return
 
         txt = self.block_e.text()
-        data = self.parse_block(txt)
+        ob_tmp = ObsPlanParser.convert_from_string(txt)
+        ob = ObsValidator.convert_to_obdict(ob_tmp)
 
-        cmd = data.get("command_name", "OBJECT")
-        if cmd not in self.rules:
+        cmd = ob.get("command_name", "OBJECT")
+        if cmd not in self.command_rules:
             return
 
         self.updating = True
         self.type_s.setCurrentText(cmd)
-        self.rebuild_table(cmd, data)
+        self.rebuild_table(cmd, ob)
         self.updating = False
 
     def command_changed(self):
@@ -906,15 +869,18 @@ class EditWindow(QWidget):
             return
         self.refresh_block()
 
+        for r in range(self.tab_t.rowCount()):
+            it = self.tab_t.item(r, 1)
+            if it:
+                it.setBackground(QColor("white"))
+
+
     def refresh_block(self):
         self.updating = True
         txt = self.build_block()
         self.block_e.setText(txt)
         self.updating = False
 
-    # =====================================================
-    # VALIDATION
-    # =====================================================
 
     def validate_current(self):
         data = self.collect_table_data()
@@ -926,12 +892,15 @@ class EditWindow(QWidget):
             key = self.tab_t.item(r, 0).data(QtCore.Qt.ItemDataRole.UserRole)
             row_map[key] = r
 
+
+        self.tab_t.blockSignals(True)
+        self.updating = True
+
         # clear colors
         for r in range(self.tab_t.rowCount()):
-            for c in [0, 1]:
-                it = self.tab_t.item(r, c)
-                if it:
-                    it.setBackground(QtGui.QColor("white"))
+            it = self.tab_t.item(r, 1)
+            if it:
+                it.setBackground(QColor("white"))
 
         # apply colors
         for key, state in result["result"].items():
@@ -939,17 +908,22 @@ class EditWindow(QWidget):
                 continue
 
             r = row_map[key]
+            color = QColor(217, 239, 217) if state is True else QColor(255, 180, 80)
 
-            color = QtGui.QColor(217, 239, 217) if state is True else QtGui.QColor(255, 180, 80)
+            it = self.tab_t.item(r, 1)
+            if it:
+                it.setBackground(color)
 
-            for c in [0, 1]:
-                it = self.tab_t.item(r, c)
-                if it:
-                    it.setBackground(color)
+        self.tab_t.blockSignals(False)
+        self.updating = False
 
         if result["valid"]:
-            self.status_l.setText("✅ Valid OB")
+            self.status_l.setText("✅ Valid OB ")
+            #self.status_l.setText("\u2714 Valid OB ")
             self.status_l.setStyleSheet("color: green; font-weight: bold;")
         else:
             self.status_l.setText("❌ Validation errors")
+            #self.status_l.setText("\u274C Validation errors")
             self.status_l.setStyleSheet("color: orange; font-weight: bold;")
+
+        return result["valid"]

@@ -63,12 +63,12 @@ class OM_Gui(QWidget):
             print("File not found: config.yaml")
             sys.exit()
 
-        #print(self.cfg)
-
-
+        t = tpg("test",["2022/10/10"])
+        self.tpg_cfg = t.cfg
 
         self.schema_columns = ObsValidator.load_schema("tpg_schema")["properties"].keys()
-        self.columns = ["ok_ob","ctc","last_obs","tpg_vis"] + self.cfg["columns"]
+        self.extra_columns = ["ok_ob","alt","last_obs","tpg_vis"]
+        self.columns = self.extra_columns + self.cfg["columns"]
 
         self.tpg_window = None
         self.i = -1
@@ -237,6 +237,23 @@ class OM_Gui(QWidget):
                                         color = QColor(220, 220, 220)
                                     item.setBackground(color)
 
+
+                                elif key == "alt":
+
+                                    alt = data.get("alt_now",None)
+
+                                    if alt:
+                                        item = QTableWidgetItem(f'{alt:.0f}')
+                                    else:
+                                        item = QTableWidgetItem("")
+
+                                    item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                                    if j % 2 == 0:
+                                        color = QColor(210, 210, 210)  # jasny szary
+                                    else:
+                                        color = QColor(220, 220, 220)
+                                    item.setBackground(color)
+
                                 else:
                                     item = QTableWidgetItem("")
                                     item.setBackground(QColor("white"))
@@ -331,7 +348,8 @@ class OM_Gui(QWidget):
         n = i_tab.index(i)
         target = self.master_data[n]["ob"]["name"]
 
-        self.phase_window = PhaseWindow(self,target,self.cfg["tel"][self.tel]["data_file"],self.master_data[n])
+        self.phase_window = PhaseWindow(self,target,self.tpg_cfg[self.tel]["data_file"],self.master_data[n])
+        #self.phase_window = PhaseWindow(self, target, self.cfg["tel"][self.tel]["data_file"], self.master_data[n])
         self.phase_window.show()
         self.phase_window.raise_()
 
@@ -376,11 +394,10 @@ class OM_Gui(QWidget):
         if self.plan_gui:
             self.plan_gui.update_table()
 
-
     def update_almanac(self):
         self.obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
         time = Time(self.obs_time, scale='utc')
-        self.almanac = sun_moon_ephem(time, self.cfg["obs_latitude"], self.cfg["obs_longitude"], self.cfg["obs_elevation"], horizon=0*units.deg)
+        self.almanac = sun_moon_ephem(time, self.tpg_cfg["obs_lat"], self.tpg_cfg["obs_lon"], self.tpg_cfg["obs_elev"], horizon=0*units.deg)
         self.almanac["julian_date"] = time.jd
 
         txt = ""
@@ -465,10 +482,10 @@ class OM_Gui(QWidget):
                 try:
                     if ob.get("obs_data",None):
                         fname = self.master_data[i]["ob"]["obs_data"]
-                        file = self.cfg["tel"][self.tel]["data_file"]+"/"+fname
+                        file = self.tpg_cfg[self.tel]["data_file"]+"/"+fname
                     else:
                         filtr = ob["seq"].split("/")[1]
-                        file = (self.cfg["tel"][self.tel]["data_file"] + ob["name"].lower() + "/" + filtr + "/light-curve/" + ob["name"].lower() + "_" + filtr + "_diff_light_curve.txt")
+                        file = (self.tpg_cfg[self.tel]["data_file"] + ob["name"].lower() + "/" + filtr + "/light-curve/" + ob["name"].lower() + "_" + filtr + "_diff_light_curve.txt")
                     print(file)
                     lc_tab = Table.read(file, format="ascii")
                     jd = numpy.array(lc_tab["jd_obs"])
@@ -499,8 +516,32 @@ class OM_Gui(QWidget):
             del self.master_data[i]
         self.update_table()
 
+    def calc_visibility(self):
+        oca = ephem.Observer()
+        oca.lon = str(self.tpg_cfg["obs_lon"])
+        oca.lat = str(self.tpg_cfg["obs_lat"])
+        oca.elev = float(self.tpg_cfg["obs_elev"])
+        oca.horizon = "0"
+
+        obs_time = datetime.datetime.combine(self.date_e.date().toPyDate(), self.time_e.time().toPyTime())
+        oca.date = str(Time(obs_time, scale='utc'))
+
+        for i,data in enumerate(self.master_data):
+            if data["ob"]:
+                ob = data["ob"]
+                if ob.get("ra", None) and ob.get("dec", None):
+                    s = ephem.FixedBody()
+                    s._ra = ob["ra"]
+                    s._dec = ob["dec"]
+                    s.compute(oca)
+                    alt = float(s.alt) * 180.0 / ephem.pi
+                    az = float(s.az) * 180.0 / ephem.pi
+                    self.master_data[i]["alt_now"] = alt
+
+        self.update_table()
+
     def validate_ob(self):
-        BASE_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+        BASE_SCHEMA = ObsValidator.load_schema("base_schema.yaml")
         TPG_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
 
         SCHEMA = merge_schemas(BASE_SCHEMA, TPG_SCHEMA)
@@ -530,7 +571,7 @@ class OM_Gui(QWidget):
                 self.plan_gui.add(ob)
 
     def save_file(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.cfg["master_file"],"Text Files (*.txt);;All Files (*)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", self.tpg_cfg[self.tel]["master_file"],"Text Files (*.txt);;All Files (*)")
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as file:
@@ -549,8 +590,10 @@ class OM_Gui(QWidget):
         self.update_almanac()
         self.tpg_window = TPGWindow(self)
 
+
+
     def load_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.cfg["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
+        file_path, _ = QFileDialog.getOpenFileName(None,"Select a File",self.tpg_cfg[self.tel]["master_file"],"All Files (*);;Text Files (*.txt);;Images (*.png *.jpg)")
         if file_path:
             self.master_file = file_path
             self.load_objects()
@@ -566,6 +609,12 @@ class OM_Gui(QWidget):
             new_columns = dialog.get_columns()
             self.columns = new_columns
             self.update_table()
+
+
+            self.cfg["columns"] = [c for c in self.columns if c not in self.extra_columns]
+            if os.path.exists(self.pwd+'/config.yaml'):
+                with open(self.pwd+'/config.yaml', 'w') as cfg_file:
+                    yaml.safe_dump(self.cfg, cfg_file)
 
     def clean_empty(self, obs: dict) -> dict:
         return {k: v for k, v in obs.items() if v not in (None, "")}
@@ -668,6 +717,10 @@ class OM_Gui(QWidget):
         self.validate_p = QPushButton("Validate OB")
         self.validate_p.clicked.connect(self.validate_ob)
         grid.addWidget(self.validate_p, w, 1)
+
+        self.visibility_p = QPushButton("Visibility")
+        self.visibility_p.clicked.connect(self.calc_visibility)
+        grid.addWidget(self.visibility_p, w, 2)
 
         self.add_p = QPushButton("Add to Plan")
         self.add_p.clicked.connect(self.add_to_plan)
@@ -974,8 +1027,8 @@ class PhaseWindow(QWidget):
     def _plot_visibility(self):
         self.axes2.clear()
 
-        hmin = float(self.ob.get("h_min", self.parent.cfg["tel"][self.parent.tel]["hmin"]))
-        hmax = float(self.ob.get("h_max", self.parent.cfg["tel"][self.parent.tel]["hmax"]))
+        hmin = float(self.ob.get("h_min", self.parent.tpg_cfg[self.parent.tel]["hmin"]))
+        hmax = float(self.ob.get("h_max", self.parent.tpg_cfg[self.parent.tel]["hmax"]))
 
         t = numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 100)
         time_range = Time(t, format="jd")
@@ -991,9 +1044,9 @@ class PhaseWindow(QWidget):
 
     def _compute_altaz(self, time_range):
         loc = EarthLocation(
-            lat=self.parent.cfg["obs_latitude"],
-            lon=self.parent.cfg["obs_longitude"],
-            height=self.parent.cfg["obs_elevation"]
+            lat=self.parent.tpg_cfg["obs_lat"],
+            lon=self.parent.tpg_cfg["obs_lon"],
+            height=self.parent.tpg_cfg["obs_elev"]
         )
 
         i = int(self.parent.table.currentRow())
@@ -1231,7 +1284,7 @@ class SkyWindow(QWidget):
         self.axes.set_yticklabels([])
 
         #self.axes.bar(0, self.rmax - 90, width=2 * math.pi, bottom=90, color='k', alpha=0.05)  # tutaj zmienia sie pasek ponizej horyzoontu
-        self.axes.set_rlim([-90,90+self.parent.cfg["obs_latitude"]])
+        self.axes.set_rlim([-90,90+self.parent.tpg_cfg["obs_lat"]])
 
         self.axes2.clear()
         self.axes2.set_theta_direction(-1)
@@ -1242,7 +1295,7 @@ class SkyWindow(QWidget):
         self.axes2.set_rticks([0, 20, 40, 60, 90])
         self.axes2.set_yticklabels(["", "", "", "", ""])
 
-        obs_location = EarthLocation(lat=self.parent.cfg["obs_latitude"], lon=self.parent.cfg["obs_longitude"], height=self.parent.cfg["obs_elevation"])  # Warszawa
+        obs_location = EarthLocation(lat=self.parent.tpg_cfg["obs_lat"], lon=self.parent.tpg_cfg["obs_lon"], height=self.parent.tpg_cfg["obs_elev"])  # Warszawa
 
         obs_time = datetime.datetime.combine(self.parent.date_e.date().toPyDate(), self.parent.time_e.time().toPyTime())
 
