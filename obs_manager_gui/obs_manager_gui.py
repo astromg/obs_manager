@@ -867,9 +867,9 @@ class PhaseWindow(QWidget):
         self._plot_visibility()
         self._plot_tpg()
 
+        self.fig.subplots_adjust(hspace=0.35)
         self.canvas.draw()
-        self.fig.subplots_adjust(hspace=0.3)
-        self.show()
+
         self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.canvas.setFocus()
 
@@ -917,8 +917,6 @@ class PhaseWindow(QWidget):
 
             if self.phase_c.isChecked():
                 self.jd = self._convert_to_phase(self.jd)
-                plot_cycle = False
-
                 self._plot_phase_constraints(self.jd, self.flag)
             else:
                 self.axes.set_title(f"{self.target}")
@@ -927,13 +925,26 @@ class PhaseWindow(QWidget):
             self._plot_zaznaczenie(self.jd, self.mag, self.flag)
             self._format_lightcurve_axes(self.mag)
 
-            self.axes.axvline(self.now_t, color="blue")
+            # thicker current time
+            self.axes.axvline(self.now_t, color="blue", lw=2, alpha=0.9, label="now")
 
             plot_cycle, last_jd, end_cycle = self._handle_cycle_logic(self.jd, self.flag)
             self._plot_cycle_overlay(plot_cycle, last_jd, end_cycle, self.mag)
 
             self._plot_time_markers()
 
+            # legend
+            from matplotlib.lines import Line2D
+            handles = [
+                Line2D([0], [0], marker='o', color='w', markerfacecolor='g',
+                       markersize=6, label='quality 0'),
+                Line2D([0], [0], marker='o', color='w', markerfacecolor='c',
+                       markersize=6, label='quality 1'),
+                Line2D([0], [0], marker='o', color='w', markerfacecolor='k',
+                       markersize=6, label='quality 2'),
+                Line2D([0], [0], color='blue', lw=2, label='now')
+            ]
+            self.axes.legend(handles=handles, loc="best", fontsize=8)
 
         except (FileNotFoundError, ValueError) as e:
             print(f"Lightcurve error: {e}")
@@ -1046,9 +1057,8 @@ class PhaseWindow(QWidget):
         return jd
 
     def _plot_zaznaczenie(self, jd, mag, flag):
-        if self.zaznaczenie_i > 0:
-            self.axes.plot(self.jd[self.zaznaczenie_i], self.mag[self.zaznaczenie_i], "ro", alpha=1)
-
+        if self.zaznaczenie_i >= 0:
+            self.axes.plot(self.jd[self.zaznaczenie_i],self.mag[self.zaznaczenie_i],"ro",markersize=8,zorder=10)
 
     def _plot_recent_and_all(self, jd, mag, flag):
         recent_mask = jd > self.current_jd - float(self.parent.cfg["last_nights_to_mark"])
@@ -1079,17 +1089,51 @@ class PhaseWindow(QWidget):
         hmin = float(self.ob.get("h_min", self.parent.tpg_cfg[self.parent.tel]["hmin"]))
         hmax = float(self.ob.get("h_max", self.parent.tpg_cfg[self.parent.tel]["hmax"]))
 
-        t = numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 100)
+        t = numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 240)
         time_range = Time(t, format="jd")
 
         alt, sun_alt, moon_alt, sep = self._compute_altaz(time_range)
 
         self._format_visibility_axes(hmin, hmax)
-        self._plot_visibility_lines(time_range.jd, alt, sun_alt, moon_alt)
+
+        # better lines
+        self.axes2.plot(time_range.jd, alt, color="green", lw=2.2, label="target")
+        self.axes2.plot(time_range.jd, sun_alt, "--", color="goldenrod", lw=1.4, label="sun")
+        self.axes2.plot(time_range.jd, moon_alt, ":", color="black", lw=1.2, label="moon")
 
         self._update_moon_sep(sep)
-        self._plot_time_constraints(time_range)
+
+        # ---------------------------
+        # TIME LIMITS as vertical lines
+        # ---------------------------
+        t_start = self.parse_time(self.ob.get("t_start"))
+        t_end = self.parse_time(self.ob.get("t_end"))
+
+        if t_start:
+            self.axes2.axvline(t_start, color="gray", ls="--", lw=1.2, label="t_start")
+
+        if t_end:
+            self.axes2.axvline(t_end, color="gray", ls="--", lw=1.2, label="t_end")
+
+        # ---------------------------
+        # TWILIGHT OFFSETS
+        # ---------------------------
+        sunset = Time(self.parent.almanac["next_sunset"]).jd
+        sunrise = Time(self.parent.almanac["next_sunrise"]).jd
+
+        sunset_dt = float(self.ob.get("sunset_dt", 0.0)) / 24.0
+        sunrise_dt = float(self.ob.get("sunrise_dt", 0.0)) / 24.0
+
+        if sunset_dt > 0:
+            x = sunset + sunset_dt
+            self.axes2.axvline(x, color="navy", ls=":", lw=1.5, label="after sunset")
+
+        if sunrise_dt > 0:
+            x = sunrise - sunrise_dt
+            self.axes2.axvline(x, color="navy", ls=":", lw=1.5, label="before sunrise")
+
         self._set_time_ticks(self.axes2, time_range)
+        self.axes2.legend(loc="upper right", fontsize=8, ncol=2)
 
     def _compute_altaz(self, time_range):
         loc = EarthLocation(
@@ -1119,10 +1163,14 @@ class PhaseWindow(QWidget):
         self.axes2.set_ylim(-20, 90)
         self.axes2.set_xlim(int(self.current_jd), int(self.current_jd) + 1)
 
-        self.axes2.axvline(self.current_jd, color="blue")
-        self.axes2.axhspan(-20, 0, facecolor='red', alpha=0.1)
-        self.axes2.axhspan(0, hmin, facecolor='black', alpha=0.05)
-        self.axes2.axhspan(hmax, 90, facecolor='black', alpha=0.05)
+        self.axes2.axvline(self.current_jd, color="blue", lw=2)
+
+        # horizon zones
+        self.axes2.axhspan(-20, 0, facecolor='lightcoral', alpha=0.10)
+        self.axes2.axhspan(0, hmin, facecolor='gray', alpha=0.08)
+        self.axes2.axhspan(hmax, 90, facecolor='gray', alpha=0.08)
+
+        self.axes2.set_ylabel("Alt [deg]")
 
     def _plot_visibility_lines(self, t, alt, sun_alt, moon_alt):
         self.axes2.plot(t, alt, "-g")
@@ -1167,18 +1215,34 @@ class PhaseWindow(QWidget):
 
         nt = Time([ephem.Date(t).datetime() for t in nt], scale='utc').jd
 
-        for i, (label, values) in enumerate(vis.items()):
+        labels = list(vis.keys())
+
+        for i, label in enumerate(labels):
+            values = vis[label]
             segments = self._split_segments(nt, values)
 
-            for color, seg in segments.items():
-                if seg:
-                    self.axes3.broken_barh(seg, (i - 0.4, 0.8),
-                                           facecolors=color, alpha=0.3)
+            if segments["green"]:
+                self.axes3.broken_barh(
+                    segments["green"],
+                    (i - 0.42, 0.84),
+                    facecolors="green",
+                    alpha=0.35
+                )
 
-        self.axes3.axvline(self.current_jd, color="blue")
-        self.axes3.set_yticks(range(len(vis)))
-        self.axes3.set_yticklabels(vis.keys())
+            if segments["red"]:
+                self.axes3.broken_barh(
+                    segments["red"],
+                    (i - 0.42, 0.84),
+                    facecolors="red",
+                    alpha=0.15
+                )
+
+        self.axes3.axvline(self.current_jd, color="blue", lw=2)
+
+        self.axes3.set_yticks(range(len(labels)))
+        self.axes3.set_yticklabels(labels, fontsize=9)
         self.axes3.set_xlim(self.axes2.get_xlim())
+        self.axes3.set_ylim(-0.8, len(labels) - 0.2)
 
         self._set_time_ticks(self.axes3, Time(nt, format="jd"))
 
@@ -1202,43 +1266,38 @@ class PhaseWindow(QWidget):
         jd_start = time_range.jd[0]
         jd_end = time_range.jd[-1]
 
-        # 1. Najważniejsze ticki
         ticks_priority = []
+        ticks_priority.append((self.current_jd, 0))
 
-        # current time
-        ticks_priority.append((self.current_jd, 0))  # 0 = najwyższy priorytet
-
-        # wschód/zachód słońca
         if self.parent.almanac.get("next_sunset"):
             ticks_priority.append((Time(self.parent.almanac["next_sunset"]).jd, 1))
         if self.parent.almanac.get("next_sunrise"):
             ticks_priority.append((Time(self.parent.almanac["next_sunrise"]).jd, 1))
-
-        # wschód/zachód księżyca
         if self.parent.almanac.get("next_moonrise"):
             ticks_priority.append((Time(self.parent.almanac["next_moonrise"]).jd, 2))
         if self.parent.almanac.get("next_moonset"):
             ticks_priority.append((Time(self.parent.almanac["next_moonset"]).jd, 2))
 
-        # co 2 godziny
-        ticks_2h = list(numpy.arange(jd_start, jd_end, 2 / 24.))
-        for t in ticks_2h:
-            ticks_priority.append((t, 3))
+        # every 2h
+        for tt in numpy.arange(jd_start, jd_end, 2 / 24.0):
+            ticks_priority.append((tt, 3))
 
-        # sortowanie po priorytecie
         ticks_priority.sort(key=lambda x: x[1])
 
-        # filtr odległości minimalnej między tickami (np. 30 min = 0.0208 JD)
-        min_distance = 60 / 60 / 24  # 30 minut w JD
-        final_ticks = []
+        # FIX: 30 minutes
+        min_distance = 30 / 60 / 24
 
+        final_ticks = []
         for jd_val, prio in ticks_priority:
             if all(abs(jd_val - t) > min_distance for t in final_ticks):
                 final_ticks.append(jd_val)
 
-        final_ticks.sort()  # dla estetyki od lewej do prawej
+        final_ticks.sort()
+
         ax.set_xticks(final_ticks)
-        ax.xaxis.set_major_formatter(mticker.FuncFormatter(self._format_jd_tick))
+        ax.xaxis.set_major_formatter(
+            mticker.FuncFormatter(self._format_jd_tick)
+        )
 
     def mkUI(self):
         grid = QGridLayout()
@@ -1248,6 +1307,7 @@ class PhaseWindow(QWidget):
 
         self.ephem_e = QLineEdit()
         self.ephem_e.setReadOnly(True)
+
         self.moon_sep_e = QLineEdit()
         self.moon_sep_e.setReadOnly(True)
 
@@ -1255,33 +1315,29 @@ class PhaseWindow(QWidget):
         self.phase_c.setChecked(True)
         self.phase_c.clicked.connect(self.refresh)
 
-
         self.fig = Figure((2.0, 2.0), linewidth=-1, dpi=100)
         self.canvas = FigureCanvas(self.fig)
 
-        gs = self.fig.add_gridspec(3, 1, height_ratios=[2, 2, 1])
+        # bigger TPG panel
+        gs = self.fig.add_gridspec(3, 1, height_ratios=[2, 2, 1.8])
 
         self.axes = self.fig.add_subplot(gs[0])
         self.axes2 = self.fig.add_subplot(gs[1])
-        self.axes3 = self.fig.add_subplot(gs[2])
+        self.axes3 = self.fig.add_subplot(gs[2], sharex=self.axes2)
 
         grid.addWidget(self.file_s, 0, 0)
         grid.addWidget(self.ephem_e, 0, 1)
         grid.addWidget(self.moon_sep_e, 0, 2)
         grid.addWidget(self.phase_c, 0, 3)
-        grid.addWidget(self.canvas,1,0,4,4)
+        grid.addWidget(self.canvas, 1, 0, 4, 4)
 
-        self.toolbar = NavigationToolbar(self.canvas,self)
+        self.toolbar = NavigationToolbar(self.canvas, self)
         grid.addWidget(self.toolbar, 5, 0, 1, 4)
 
-        self.close_p = QPushButton('Close')
+        self.close_p = QPushButton("Close")
         self.close_p.clicked.connect(lambda: self.close())
         grid.addWidget(self.close_p, 6, 3)
 
-        #grid.setColumnStretch(0, 1)
-        #grid.setColumnStretch(1, 1)
-        #grid.setColumnStretch(2, 1)
-        #grid.setColumnStretch(3, 1)
         grid.setRowStretch(0, 1)
         grid.setRowStretch(1, 0)
         grid.setRowStretch(2, 0)
