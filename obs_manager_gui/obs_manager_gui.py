@@ -1089,7 +1089,7 @@ class PhaseWindow(QWidget):
         hmin = float(self.ob.get("h_min", self.parent.tpg_cfg[self.parent.tel]["hmin"]))
         hmax = float(self.ob.get("h_max", self.parent.tpg_cfg[self.parent.tel]["hmax"]))
 
-        t = numpy.linspace(int(self.current_jd), int(self.current_jd) + 1, 240)
+        t = numpy.linspace((self.current_jd), (self.current_jd) + 1, 240)
         time_range = Time(t, format="jd")
 
         alt, sun_alt, moon_alt, sep = self._compute_altaz(time_range)
@@ -1134,6 +1134,7 @@ class PhaseWindow(QWidget):
 
         self._set_time_ticks(self.axes2, time_range)
         self.axes2.legend(loc="upper right", fontsize=8, ncol=2)
+        self.axes2.set_xlabel("UT")
 
     def _compute_altaz(self, time_range):
         loc = EarthLocation(
@@ -1161,7 +1162,7 @@ class PhaseWindow(QWidget):
 
     def _format_visibility_axes(self, hmin, hmax):
         self.axes2.set_ylim(-20, 90)
-        self.axes2.set_xlim(int(self.current_jd), int(self.current_jd) + 1)
+        self.axes2.set_xlim((self.current_jd), (self.current_jd) + 1)
 
         self.axes2.axvline(self.current_jd, color="blue", lw=2)
 
@@ -1245,6 +1246,7 @@ class PhaseWindow(QWidget):
         self.axes3.set_ylim(-0.8, len(labels) - 0.2)
 
         self._set_time_ticks(self.axes3, Time(nt, format="jd"))
+        self.axes3.set_xlabel("UT")
 
     def _split_segments(self, nt, values):
         green, red = [], []
@@ -1258,13 +1260,20 @@ class PhaseWindow(QWidget):
     # Ticksy na wykresach
 
     def _format_jd_tick(self, jd, pos=None):
-        dt = Time(jd, format="jd").to_datetime()
-        return dt.strftime("%H:%M")
+        try:
+            jd = float(jd)
+            dt = Time(jd, format="jd",scale="utc").to_datetime()
+            return dt.strftime("%H:%M")
+        except Exception:
+            return ""
+
 
     # Funkcja ustawiająca inteligentne ticki
     def _set_time_ticks(self, ax, time_range):
         jd_start = time_range.jd[0]
         jd_end = time_range.jd[-1]
+
+        ax.xaxis_date(None)
 
         ticks_priority = []
         ticks_priority.append((self.current_jd, 0))
@@ -1295,9 +1304,8 @@ class PhaseWindow(QWidget):
         final_ticks.sort()
 
         ax.set_xticks(final_ticks)
-        ax.xaxis.set_major_formatter(
-            mticker.FuncFormatter(self._format_jd_tick)
-        )
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(self._format_jd_tick))
+        ax.tick_params(axis="x", labelrotation=0)
 
     def mkUI(self):
         grid = QGridLayout()
