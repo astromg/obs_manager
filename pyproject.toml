@@ -18,9 +18,12 @@ PyQt6-sip = "13.6.0"
 
 scipy = "^1.11"
 numpy = "^1.24.1"
+
 ephem = "^4.1.4"
 
-pyaraucaria = { path = "./../pyaraucaria", develop = true }
+pyaraucaria = {git = "https://github.com/araucaria-project/pyaraucaria.git"}
+#pyaraucaria = { path = "./../pyaraucaria", develop = true }
+
 tpg = { path = "./../tpg", develop = true }
 
 [tool.poetry.scripts]

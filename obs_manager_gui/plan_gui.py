@@ -657,7 +657,7 @@ class EditWindow(QWidget):
         self.parent = parent
 
         self.base_schema = ObsValidator.load_schema("base_schema.yaml")
-        self.command_rules = ObsValidator.load_schema("command_rules.yaml")
+        self.command_rules = ObsValidator.load_schema("base_rules.yaml")
         self.validator = ObsValidator(self.base_schema, self.command_rules)
 
         self.setWindowTitle(" OB EDIT WINDOW")
@@ -665,68 +665,10 @@ class EditWindow(QWidget):
         self.setStyleSheet("font-size: 11pt;")
 
         self.updating = False
+        self.initial_load = True
 
         self.mkUI()
         self.load_initial()
-
-    def mkUI(self):
-        grid = QGridLayout()
-
-        r = 0
-        # block line
-        self.block_e = QLineEdit()
-        self.block_e.textChanged.connect(self.block_changed)
-        grid.addWidget(self.block_e, r, 0, 1, 3)
-
-        r += 1
-        # command selector
-        self.type_l = QLabel("TYPE")
-        self.type_s = QComboBox()
-        self.type_s.addItems(list(self.command_rules.keys()))
-        self.type_s.currentTextChanged.connect(self.command_changed)
-
-        grid.addWidget(self.type_l, r, 0)
-        grid.addWidget(self.type_s, r, 1, 1, 2)
-
-        r += 1
-        # table
-        self.tab_t = QTableWidget()
-        self.tab_t.setColumnCount(3)
-        self.tab_t.setHorizontalHeaderLabels(["Parameter", "Value", "Example"])
-        self.tab_t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.tab_t.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.tab_t.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-
-        self.tab_t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # zaznaczenie całego wiersza
-        self.tab_t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.tab_t.setStyleSheet("selection-background-color: rgb(200,220,255); selection-color: black; ")
-        self.tab_t.verticalHeader().hide()
-
-        self.tab_t.itemChanged.connect(self.table_changed)
-
-        grid.addWidget(self.tab_t, r, 0, 1, 3)
-
-        r += 1
-        # status
-        self.status_l = QLabel("Not validated")
-        grid.addWidget(self.status_l, r, 0, 1, 2)
-
-        self.validate_p = QPushButton("Validate OB")
-        self.validate_p.clicked.connect(self.validate_current)
-        grid.addWidget(self.validate_p, r, 1, 1 ,2)
-
-        r += 1
-
-        self.save_p = QPushButton("Save")
-        self.save_p.clicked.connect(self.save_ob)
-        grid.addWidget(self.save_p, r, 2)
-
-        self.close_p = QPushButton("Close")
-        self.close_p.clicked.connect(self.close)
-        grid.addWidget(self.close_p, r, 0)
-
-        self.setLayout(grid)
-        self.show()
 
     def save_ob(self):
         if self.validate_current():
@@ -743,6 +685,7 @@ class EditWindow(QWidget):
 
         self.block_e.setText(txt)
         self.block_e.setCursorPosition(0)
+        self.initial_load = False
 
 
     def build_block(self):
@@ -838,16 +781,25 @@ class EditWindow(QWidget):
 
 
     def block_changed(self):
+        if not self.initial_load:
+            self.status_l.setText("\u2699 OB changed")
+            self.status_l.setStyleSheet("color: blue; font-weight: normal;")
+
         if self.updating:
             return
 
         txt = self.block_e.text()
         ob_tmp = ObsPlanParser.convert_from_string(txt)
-        ob = ObsValidator.convert_to_obdict(ob_tmp)
+        if ob_tmp:
+            ob = ObsValidator.convert_to_obdict(ob_tmp)
+            cmd = ob.get("command_name", "OBJECT")
+        else:
+            ob = {"command_name", "OBJECT"}
+            cmd = "OBJECT"
 
-        cmd = ob.get("command_name", "OBJECT")
-        if cmd not in self.command_rules:
-            return
+        if cmd not in self.base_schema["properties"]["command_name"]["enum"]:
+            ob = {"command_name", "OBJECT"}
+            cmd = "OBJECT"
 
         self.updating = True
         self.type_s.setCurrentText(cmd)
@@ -865,6 +817,9 @@ class EditWindow(QWidget):
         self.refresh_block()
 
     def table_changed(self):
+        self.status_l.setText("\u2699 OB changed")
+        self.status_l.setStyleSheet("color: blue; font-weight: normal;")
+
         if self.updating:
             return
         self.refresh_block()
@@ -927,3 +882,62 @@ class EditWindow(QWidget):
             self.status_l.setStyleSheet("color: orange; font-weight: bold;")
 
         return result["valid"]
+
+    def mkUI(self):
+        grid = QGridLayout()
+
+        r = 0
+        # block line
+        self.block_e = QLineEdit()
+        self.block_e.textChanged.connect(self.block_changed)
+        grid.addWidget(self.block_e, r, 0, 1, 3)
+
+        r += 1
+        # command selector
+        self.type_l = QLabel("TYPE")
+        self.type_s = QComboBox()
+        self.type_s.addItems(list(self.command_rules.keys()))
+        self.type_s.currentTextChanged.connect(self.command_changed)
+
+        grid.addWidget(self.type_l, r, 0)
+        grid.addWidget(self.type_s, r, 1, 1, 2)
+
+        r += 1
+        # table
+        self.tab_t = QTableWidget()
+        self.tab_t.setColumnCount(3)
+        self.tab_t.setHorizontalHeaderLabels(["Parameter", "Value", "Example"])
+        self.tab_t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.tab_t.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.tab_t.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.tab_t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # zaznaczenie całego wiersza
+        self.tab_t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tab_t.setStyleSheet("selection-background-color: rgb(200,220,255); selection-color: black; ")
+        self.tab_t.verticalHeader().hide()
+
+        self.tab_t.itemChanged.connect(self.table_changed)
+
+        grid.addWidget(self.tab_t, r, 0, 1, 3)
+
+        r += 1
+        # status
+        self.status_l = QLabel("Not validated")
+        grid.addWidget(self.status_l, r, 0, 1, 2)
+
+        self.validate_p = QPushButton("Validate OB")
+        self.validate_p.clicked.connect(self.validate_current)
+        grid.addWidget(self.validate_p, r, 1, 1 ,2)
+
+        r += 1
+
+        self.save_p = QPushButton("Save")
+        self.save_p.clicked.connect(self.save_ob)
+        grid.addWidget(self.save_p, r, 2)
+
+        self.close_p = QPushButton("Close")
+        self.close_p.clicked.connect(self.close)
+        grid.addWidget(self.close_p, r, 0)
+
+        self.setLayout(grid)
+        self.show()

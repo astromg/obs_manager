@@ -67,10 +67,16 @@ class OM_Gui(QWidget):
             sys.exit()
 
         t = tpg("test",["2022/10/10"])
+        t._get_config()
         self.tpg_cfg = t.cfg
 
-        self.schema_columns = ObsValidator.load_schema("tpg_schema")["properties"].keys()
-        self.extra_columns = ["ok_ob","alt","last_obs","tpg_vis"]
+
+        BASE_SCHEMA = ObsValidator.load_schema("base_schema.yaml")
+        TPG_SCHEMA = ObsValidator.load_schema("tpg_schema.yaml")
+        SCHEMA = merge_schemas(BASE_SCHEMA, TPG_SCHEMA)
+
+        self.schema_columns = SCHEMA["properties"].keys()
+        self.extra_columns = ["ok_ob","alt","last_obs","tpg_vis","ctc"]
         self.columns = self.extra_columns + self.cfg["columns"]
 
         self.tpg_window = None
@@ -133,7 +139,8 @@ class OM_Gui(QWidget):
                         show_txt = False
                     if not (txt4.lower() in data["ob"].get("sciprog", "").lower()):
                         show_txt = False
-                    if not (txt5.lower() in data["ob"].get("tag", "").lower()):
+                    keyword = self.filter_tag_s.currentText()
+                    if not (txt5.lower() in data["ob"].get(keyword, "").lower()):
                         show_txt = False
                     data["ob"] = self.clean_empty(data["ob"])
 
@@ -214,9 +221,12 @@ class OM_Gui(QWidget):
                                     item.setBackground(color)
                                 elif key == "ctc":
 
-                                    #ctc = data["tpg"].get("ob_time",None)
+                                    ctc = data["tpg"].get("ctc",None)
 
-                                    item = QTableWidgetItem("")
+                                    if ctc:
+                                        item = QTableWidgetItem(f'{float(ctc):.0f} [m]')
+                                    else:
+                                        item = QTableWidgetItem("")
                                     item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                                     if j % 2 == 0:
                                         color = QColor(210, 210, 210)  # jasny szary
@@ -556,7 +566,7 @@ class OM_Gui(QWidget):
 
         SCHEMA = merge_schemas(BASE_SCHEMA, TPG_SCHEMA)
 
-        COMMAND_RULES = ObsValidator.load_schema("command_rules.yaml")
+        COMMAND_RULES = ObsValidator.load_schema("base_rules.yaml")
 
         for i,data in enumerate(self.master_data):
             data["edited"] = []
@@ -675,24 +685,28 @@ class OM_Gui(QWidget):
         grid.addWidget(self.filter_sci_e, w, 4,1,2)
 
         w = w + 1
-        self.filter_pi_l = QLabel("Filter PI")
-        self.filter_pi_e = QLineEdit("")
-        self.filter_pi_e.textChanged.connect(self.update_table)
-        grid.addWidget(self.filter_pi_l, w, 0)
-        grid.addWidget(self.filter_pi_e, w, 1,1,2)
-
-        self.filter_tag_l = QLabel("Filter TAG")
-        self.filter_tag_e = QLineEdit("")
-        self.filter_tag_e.textChanged.connect(self.update_table)
-        grid.addWidget(self.filter_tag_l, w, 3)
-        grid.addWidget(self.filter_tag_e, w, 4,1,2)
-
-        w = w + 1
         self.filter_other_l = QLabel("Filter TXT")
         self.filter_other_e = QLineEdit("")
         self.filter_other_e.textChanged.connect(self.update_table)
         grid.addWidget(self.filter_other_l, w, 0)
         grid.addWidget(self.filter_other_e, w, 1,1,2)
+
+        self.filter_pi_l = QLabel("Filter PI")
+        self.filter_pi_e = QLineEdit("")
+        self.filter_pi_e.textChanged.connect(self.update_table)
+        grid.addWidget(self.filter_pi_l, w, 3)
+        grid.addWidget(self.filter_pi_e, w, 4,1,2)
+
+        w = w + 1
+
+        self.filter_tag_s = QComboBox()
+        self.filter_tag_s.addItems(self.schema_columns)
+        self.filter_tag_s.setCurrentText("tag")
+        #self.filter_tag_l = QLabel("Filter TAG")
+        self.filter_tag_e = QLineEdit("")
+        self.filter_tag_e.textChanged.connect(self.update_table)
+        grid.addWidget(self.filter_tag_s, w, 0)
+        grid.addWidget(self.filter_tag_e, w, 1,1,2)
 
         self.fill_uobi_p = QPushButton("Fill UOBI")
         self.fill_uobi_p.clicked.connect(self.fill_uobi)
@@ -833,8 +847,8 @@ class PhaseWindow(QWidget):
                 tel = self.parent.tel
                 path = f'/data/fits/{tel}/raw/{self.fits_file[i].split("_")[1]}/{self.fits_file[i].replace("_ap.txt", ".fits")}'
 
-                subprocess.run(["fv", path])
-                # DUPA
+                subprocess.Popen(["fv", path], start_new_session=True)
+
 
 
     def get_object(self):
@@ -1596,6 +1610,7 @@ class TPGWindow(QWidget):
         for ob in self.p.ob:
             if "visibility" in ob:
                 idx = ob["index"]
+                self.parent.master_data[idx]["tpg"]["ctc"] = ob["slotTime"]
                 self.parent.master_data[idx]["tpg"]["visibility"] = ob["visibility"]
                 self.parent.master_data[idx]["tpg"]["nightTime"] = self.p.nightTime
 
@@ -1635,7 +1650,7 @@ class TPGWindow(QWidget):
                 seed = int(self.seed_e.text())
 
 
-            self.p = tpg(tel,dt,loud=True,wind=wind,fwhm=fwhm,seed=seed,save_plan=self.save_c.isChecked(),add_start_makro=self.start_macro_c.isChecked(),add_end_makro=self.end_macro_c.isChecked(),)
+            self.p = tpg(tel,dt,loud=True,wind=wind,fwhm=fwhm,seed=seed,save_plan=self.save_c.isChecked(),use_ctc=self.ctc_c.isChecked(),add_start_makro=self.start_macro_c.isChecked(),add_end_makro=self.end_macro_c.isChecked(),)
 
             self.p.Initiate()
             self.p.init_ctc()
@@ -1645,7 +1660,6 @@ class TPGWindow(QWidget):
             for n, data in enumerate(self.parent.master_data):
                 if data.get("ob", None):
                     line = ObsValidator.convert_from_obdict(data["ob"])
-                    line = line.split(" ", 1)[1]
                     tmp = self.p.parseObjects(line)
                     tmp["index"] = n
                     self.p.ob.append(tmp)
@@ -1792,8 +1806,13 @@ class TPGWindow(QWidget):
         r += 1
 
         self.save_c = QCheckBox("Save plan")
-        self.save_c.setChecked(True)
+        self.save_c.setChecked(False)
         grid.addWidget(self.save_c, r, 0, 1, 2)
+        r += 1
+
+        self.ctc_c = QCheckBox("Use CTC")
+        self.ctc_c.setChecked(True)
+        grid.addWidget(self.ctc_c, r, 0, 1, 2)
         r += 1
 
         self.start_macro_c = QCheckBox("Add start macro")
