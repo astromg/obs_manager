@@ -354,6 +354,10 @@ class OM_Gui(QWidget):
 
 
     def plot_data(self):
+
+        if i < 0:
+            return
+
         i = int(self.table.currentRow())
         i_tab = [int(data["index"]) for data in self.master_data]
 
