@@ -238,7 +238,7 @@ class OM_Gui(QWidget):
 
                                     last_jd = data["ob"].get("last_jd",None)
                                     if last_jd:
-                                        dt = self.almanac["julian_date"] - last_jd
+                                        dt = float(self.almanac["julian_date"]) - float(last_jd)
                                         item = QTableWidgetItem(f'{dt:.1f}')
                                     else:
                                         item = QTableWidgetItem("")
