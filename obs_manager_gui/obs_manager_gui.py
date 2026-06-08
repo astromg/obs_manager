@@ -54,7 +54,7 @@ class OM_Gui(QWidget):
         self.phase_window = None
         self.sky_window = None
 
-        self.inactive_statuses = ["deactivated","inactive"]
+        self.inactive_statuses = ["deactivated","inactive","finished"]
 
         self.cwd = os.getcwd()  # curent working directory
         self.pwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # app location
