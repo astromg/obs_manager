@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "obs_manager"
-version = "0.1.0"
+version = "0.1.1"
 description = "OCM master plan manager"
 authors = ["Marek Gorski <mgorski@camk.edu.pl>"]
 license = "MIT"
