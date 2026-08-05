@@ -29,7 +29,12 @@ columns:
 - makro
 - other
 last_nights_to_mark: 10
+<<<<<<< HEAD
+=======
 
+columns:  ["name","ra","dec","seq","priority","cycle","ph_mk","ph_start","ph_end","t_start","t_end","h_min","h_max","uobi","sciprog","pi","tag","P","hjd0","min_moon_dist","max_moon_phase","comment","obs_data","ob_time","makro","mV","other"]
+
+>>>>>>> main
 tel:
   iris: null
   jk15: null
